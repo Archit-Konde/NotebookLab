@@ -6,6 +6,20 @@ All notable changes to NotebookLab will be documented in this file.
 
 ### Fixed
 
+- The tour ran off the bottom of the window. It positioned each card using a
+  fixed guess of 210 pixels for its height, and the cards actually measure
+  between 236 and 290, so the clamp that was meant to keep them on screen
+  believed they fitted when their lower half was already past the edge, taking
+  the Next button out of reach. The card is now measured, flips to the other
+  side of what it is pointing at when there is no room, and scrolls rather than
+  overflowing on a window too short to hold it.
+- The notebook being worked in is shown in the header at all times, beside the
+  app name. It was in the status bar in the smallest type on screen, among
+  transient counters, and only appeared once a notebook had been chosen, so the
+  state that most needed saying, none selected, was the one that said nothing.
+  It now names the notebook with its own colour, or offers to choose one, and
+  the duplicate has been taken out of the status bar.
+
 - Saving an audio file on Windows put a PowerShell console window on top of the
   app for the whole of synthesis, which for a full script is many seconds of a
   black box the user did not ask for. The speech process is now started hidden,

@@ -1,14 +1,15 @@
 /*
  * Name: status-bar.tsx
- * Purpose: Bottom status bar with a live activity indicator, the active
- *   notebook, session token usage, and the indexed chunk count.
+ * Purpose: Bottom status bar with a live activity indicator, running
+ *   generations, session token usage, and the indexed chunk count.
  * Description: The left dot is a real activity signal: amber when no model is
  *   loaded, green when a provider is ready, and a pulsing accent (with a ping
  *   ring) whenever the app is actually working, i.e. any chat, import, or
  *   generation is in flight, or a model is downloading, with the label
  *   narrating the state for screen readers. The state itself is derived by the
- *   pure deriveStatus helper. Animation stands down under reduced motion. The
- *   active notebook name scopes chat and search; polls every 10 seconds.
+ *   pure deriveStatus helper. Animation stands down under reduced motion.
+ *   Polls every 10 seconds. Which notebook is active is context rather than
+ *   status, so it lives in the header; see notebook-context.tsx.
  * Tech Stack: React 19, TanStack Query, Tailwind CSS
  * License: MIT
  * Authors: Amey Thakur (https://github.com/Amey-Thakur)
@@ -18,15 +19,12 @@
 
 import { useEffect, useState } from "react";
 import { useQuery, useIsMutating } from "@tanstack/react-query";
-import { Link } from "react-router";
 import { listen } from "@tauri-apps/api/event";
 
 import { tauriInvoke } from "@/services/tauri-client";
-import { QUERY_KEYS, ROUTES } from "@/lib/constants";
+import { QUERY_KEYS } from "@/lib/constants";
 import { cn } from "@/lib/utils";
-import { useNotebookStore } from "@/stores/notebook-store";
 import { countRunning, selectJobs, useJobStore } from "@/stores/job-store";
-import { useNotebooks } from "@/features/notebooks/hooks/use-notebooks";
 import { deriveStatus } from "./status-state";
 import { UsageChip } from "./usage-chip";
 
@@ -37,8 +35,6 @@ interface DownloadProgress {
 }
 
 export function StatusBar() {
-  const activeNotebookId = useNotebookStore((s) => s.activeNotebookId);
-  const { data: notebooks } = useNotebooks();
   const [updateVersion, setUpdateVersion] = useState<string | null>(null);
   const [downloadPercent, setDownloadPercent] = useState<number | null>(null);
 
@@ -90,7 +86,6 @@ export function StatusBar() {
   });
 
   const chunks = chunkCount ?? 0;
-  const activeNotebook = notebooks?.find((nb) => nb.id === activeNotebookId);
 
   const status = deriveStatus({
     hasProvider: !!activeProvider,
@@ -131,30 +126,12 @@ export function StatusBar() {
         </span>
 
         {/* Generations keep running wherever the user goes, so the count has to
-
             be visible from every page rather than only on the one that started
-
             the work. */}
-
         {running > 0 && (
-
           <span className="font-mono text-2xs text-accent shrink-0" title={runningLabel}>
-
             {running} {running === 1 ? "generation" : "generations"} running
-
           </span>
-
-        )}
-
-
-        {activeNotebook && (
-          <Link
-            to={ROUTES.NOTEBOOKS}
-            className="font-mono text-2xs text-text-3 hover:text-text-1 truncate transition-colors"
-            title={`Active notebook: ${activeNotebook.name}. Open Notebooks to switch.`}
-          >
-            in {activeNotebook.name}
-          </Link>
         )}
       </div>
 

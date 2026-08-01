@@ -16,6 +16,7 @@
 import { ThemeToggle } from "@/components/shared/theme-toggle";
 import { BrandMark } from "@/components/shared/brand-mark";
 import { ModelSwitcher } from "@/components/layout/model-switcher";
+import { NotebookContext } from "@/components/layout/notebook-context";
 import { IS_MAC } from "@/lib/shortcuts";
 
 
@@ -35,7 +36,7 @@ export function AppHeader({ sidebarOpen, onToggleSidebar, onOpenPalette }: AppHe
       className="flex items-center justify-between h-10 px-4 border-b border-border bg-bg select-none"
       data-tauri-drag-region
     >
-      <div className="flex items-center gap-3">
+      <div className="flex min-w-0 items-center gap-3">
         {/* Hamburger - mobile only */}
         <button
           type="button"
@@ -50,12 +51,14 @@ export function AppHeader({ sidebarOpen, onToggleSidebar, onOpenPalette }: AppHe
           </svg>
         </button>
 
-        <span className="flex items-center gap-2">
+        <span className="flex shrink-0 items-center gap-2">
           <BrandMark className="h-5 w-5" />
           <span className="font-display text-base font-bold tracking-tight text-text-1">
             NotebookLab
           </span>
         </span>
+
+        <NotebookContext />
       </div>
 
       <div className="flex items-center gap-2">

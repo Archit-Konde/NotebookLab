@@ -15,7 +15,7 @@
  * Date: 2026-07-14
  */
 
-import { useCallback, useEffect, useLayoutEffect, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router";
 
 import { ROUTES } from "@/lib/constants";
@@ -160,6 +160,8 @@ const STEPS: TourStep[] = [
 const TOOLTIP_WIDTH = 300;
 const GAP = 14;
 const PAD = 6;
+/** Breathing room kept between the tooltip and every edge of the window. */
+const MARGIN = 12;
 
 interface ProductTourProps {
   open: boolean;
@@ -173,6 +175,11 @@ export function ProductTour({ open, onFinish, onOpenSample }: ProductTourProps) 
      without a reset effect. */
   const [step, setStep] = useState(0);
   const [rect, setRect] = useState<DOMRect | null>(null);
+  /* The card's real height, measured after it renders. Steps differ in length by
+     a factor of three, so a single guessed height cannot keep them all on
+     screen. Seeded with a sensible value for the very first paint only. */
+  const [cardHeight, setCardHeight] = useState(210);
+  const cardRef = useRef<HTMLDivElement | null>(null);
   const navigate = useNavigate();
 
   /* The opening steps describe Home, so the tour must start there. Without
@@ -216,6 +223,23 @@ export function ProductTour({ open, onFinish, onOpenSample }: ProductTourProps) 
     measure();
   }, [measure]);
 
+  /* Measure the card itself so the clamp works from its real height. A
+     ResizeObserver rather than a one-off read, because the height changes when
+     the step changes and when a narrow window rewraps the text. Guarded on an
+     actual change so storing it cannot feed itself. */
+  useLayoutEffect(() => {
+    const el = cardRef.current;
+    if (!open || !el) return;
+    const read = () => {
+      const next = el.getBoundingClientRect().height;
+      if (next > 0) setCardHeight((prev) => (Math.abs(prev - next) > 1 ? next : prev));
+    };
+    read();
+    const observer = new ResizeObserver(read);
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, [open, step]);
+
   useEffect(() => {
     if (!open) return;
     const onChange = () => measure();
@@ -247,7 +271,7 @@ export function ProductTour({ open, onFinish, onOpenSample }: ProductTourProps) 
 
   if (!open || !current) return null;
 
-  const tip = tooltipPosition(rect, current.placement);
+  const tip = tooltipPosition(rect, current.placement, cardHeight);
 
   return (
     <div className="fixed inset-0 z-[70]" role="dialog" aria-modal="true" aria-label="How it works">
@@ -274,8 +298,11 @@ export function ProductTour({ open, onFinish, onOpenSample }: ProductTourProps) 
       <div className="absolute inset-0" onClick={onFinish} aria-hidden="true" />
 
       <div
-        className="absolute w-[300px] max-w-[calc(100vw-24px)] border border-border bg-surface shadow-xl"
-        style={{ top: tip.top, left: tip.left }}
+        ref={cardRef}
+        /* On a window too short for the card, it scrolls rather than running off
+           the bottom with the Next button beyond reach. */
+        className="absolute flex w-[300px] max-w-[calc(100vw-24px)] flex-col overflow-y-auto border border-border bg-surface shadow-xl"
+        style={{ top: tip.top, left: tip.left, maxHeight: "calc(100vh - 24px)" }}
         onClick={(event) => event.stopPropagation()}
       >
         <div className="p-4">
@@ -334,17 +361,32 @@ export function ProductTour({ open, onFinish, onOpenSample }: ProductTourProps) 
 }
 
 /* Place the tooltip beside the target per the step's placement, clamped to the
-   viewport. With no target, center it. */
+   viewport. With no target, center it.
+
+   `height` is the card's measured height, not a guess. It used to be a fixed
+   210, and several steps carry enough text to render half again as tall, so the
+   clamp believed the card fitted when its lower half was already past the bottom
+   of the window: the buttons that advance the tour went out of reach and the
+   walkthrough could not be finished without a keyboard. */
 function tooltipPosition(
   rect: DOMRect | null,
   placement: TourStep["placement"],
+  height: number,
 ): { top: number; left: number } {
   const vw = window.innerWidth;
   const vh = window.innerHeight;
-  const estHeight = 210;
+  const width = Math.min(TOOLTIP_WIDTH, vw - MARGIN * 2);
+
+  /* When the card is taller than the window there is no position that fits it;
+     pinning it to the top keeps its own scrollbar reachable. */
+  const highest = MARGIN;
+  const lowest = Math.max(MARGIN, vh - height - MARGIN);
 
   if (!rect) {
-    return { top: Math.max(12, vh / 2 - estHeight / 2), left: Math.max(12, vw / 2 - TOOLTIP_WIDTH / 2) };
+    return {
+      top: Math.min(Math.max(MARGIN, vh / 2 - height / 2), lowest),
+      left: Math.max(MARGIN, vw / 2 - width / 2),
+    };
   }
 
   let top: number;
@@ -357,11 +399,28 @@ function tooltipPosition(
     left = rect.left;
   } else {
     /* top */
-    top = rect.top - estHeight - GAP;
+    top = rect.top - height - GAP;
     left = rect.left;
   }
 
-  left = Math.min(Math.max(12, left), vw - TOOLTIP_WIDTH - 12);
-  top = Math.min(Math.max(12, top), vh - estHeight - 12);
+  /* Beside the target is only worth keeping while it leaves room. A card placed
+     to the right of a wide element, or below one near the bottom, would be
+     pushed back over the thing it is pointing at; flipping to the other side
+     keeps both the target and the card visible. */
+  if (placement === "right" && left + width > vw - MARGIN) {
+    const flipped = rect.left - width - GAP;
+    left = flipped >= MARGIN ? flipped : Math.max(MARGIN, vw - width - MARGIN);
+  }
+  if (placement === "bottom" && top + height > vh - MARGIN) {
+    const flipped = rect.top - height - GAP;
+    if (flipped >= MARGIN) top = flipped;
+  }
+  if (placement === "top" && top < MARGIN) {
+    const flipped = rect.bottom + GAP;
+    if (flipped + height <= vh - MARGIN) top = flipped;
+  }
+
+  left = Math.min(Math.max(MARGIN, left), Math.max(MARGIN, vw - width - MARGIN));
+  top = Math.min(Math.max(highest, top), lowest);
   return { top, left };
 }
