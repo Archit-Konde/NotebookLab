@@ -3,10 +3,12 @@
  * Purpose: Tailwind configuration with custom design tokens mapped from CSS
  *   variables.
  * Description: All colors reference CSS custom properties for theme
- *   switching. Font stack: Play (display/UI), Source Serif 4
+ *   switching. Loaded by Tailwind 4 through the @config directive in
+ *   globals.css rather than being discovered automatically, which is
+ *   how v4 supports a JavaScript config. Font stack: Play (display/UI), Source Serif 4
  *   (body/editor), JetBrains Mono (code). 8-point spacing grid
  *   enforced via default spacing scale.
- * Tech Stack: Tailwind CSS 3.4
+ * Tech Stack: Tailwind CSS 4
  * License: MIT
  * Authors: Amey Thakur (https://github.com/Amey-Thakur)
  *          Archit Konde (https://github.com/Archit-Konde)

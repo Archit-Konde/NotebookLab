@@ -17,9 +17,17 @@
 
 @import "./editor.css";
 
-@tailwind base;
-@tailwind components;
-@tailwind utilities;
+/* Tailwind 4 replaces the three @tailwind directives with one import.
+
+   The design tokens stay in config/tailwind.config.ts, loaded by @config. That
+   is a supported v4 feature, not a shim: the alternative is moving every token
+   into an @theme block, which would mean renaming the runtime CSS variables
+   this file defines, because Tailwind 4 claims the --color-* namespace itself.
+   Those exact names are read at runtime by getComputedStyle in the canvas, the
+   notes graph and the idea space, so renaming them silently breaks three
+   drawings that no build or test can check. */
+@import "tailwindcss";
+@config "../../config/tailwind.config.ts";
 
 
 /* ---- SELF-HOSTED FONTS (offline-first, no CDN dependency) ---- */
