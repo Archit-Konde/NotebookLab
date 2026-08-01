@@ -133,7 +133,15 @@ pub fn parse_and_chunk(
     let parser = parsers::parser_for_extension(extension, ocr.as_ref())?;
     let parsed = parser.parse(file_path)?;
 
-    /* Chunk each page and collect all chunks */
+    /* Chunk each page and collect all chunks.
+
+    `chunk_text` numbers positions from zero for the text it is given, so a
+    ten-page document came back with ten chunks numbered 0, ten numbered 1, and
+    so on. Everything that reads a document back orders by position, so those
+    ties put page one's first chunk next to page two's first chunk, and a
+    transform assembled the document interleaved rather than in reading order.
+    Renumbering across the whole document makes position mean what its readers
+    assume it means. */
     let mut all_chunks = Vec::new();
     for page in &parsed.pages {
         let heading_context = page.headings.first().cloned().unwrap_or_default();
@@ -144,6 +152,10 @@ pub fn parse_and_chunk(
             &heading_context,
         );
         all_chunks.append(&mut page_chunks);
+    }
+
+    for (index, chunk) in all_chunks.iter_mut().enumerate() {
+        chunk.position = index as i32;
     }
 
     if all_chunks.is_empty() {
@@ -187,4 +199,72 @@ fn compute_file_hash(path: &Path) -> AppResult<String> {
 
     let result = hasher.finalize();
     Ok(format!("{:x}", result))
+}
+
+#[cfg(test)]
+mod tests {
+    use crate::services::chunking_service;
+
+    /// Rebuild what `parse_and_chunk` does across pages, without needing a real
+    /// file or a parser: chunk each page, concatenate, then renumber.
+    fn chunk_pages(pages: &[(&str, i32)]) -> Vec<crate::database::models::CreateChunk> {
+        let mut all = Vec::new();
+        for (text, page_number) in pages {
+            let mut chunks = chunking_service::chunk_text("doc", text, Some(*page_number), "");
+            all.append(&mut chunks);
+        }
+        for (index, chunk) in all.iter_mut().enumerate() {
+            chunk.position = index as i32;
+        }
+        all
+    }
+
+    #[test]
+    fn positions_are_unique_across_a_multi_page_document() {
+        /* The bug: chunk_text numbers from zero for the text it is given, so
+        every page produced its own chunk 0. Everything that reads a document
+        back orders by position, so those ties interleaved the pages and a
+        transform assembled the document out of reading order. */
+        let long = "word ".repeat(1200);
+        let pages = [(long.as_str(), 1), (long.as_str(), 2), (long.as_str(), 3)];
+        let chunks = chunk_pages(&pages);
+        assert!(chunks.len() > 3, "expected several chunks per page");
+
+        let positions: Vec<i32> = chunks.iter().map(|c| c.position).collect();
+        let mut sorted = positions.clone();
+        sorted.sort_unstable();
+        sorted.dedup();
+        assert_eq!(sorted.len(), positions.len(), "positions must be unique");
+        assert_eq!(positions, (0..positions.len() as i32).collect::<Vec<_>>());
+    }
+
+    #[test]
+    fn ordering_by_position_reads_the_pages_in_order() {
+        /* What the fix is for: sorting by position must walk page 1 through to
+        page 3, never jump between them. */
+        let long = "word ".repeat(1200);
+        let mut chunks = chunk_pages(&[(long.as_str(), 1), (long.as_str(), 2), (long.as_str(), 3)]);
+        chunks.sort_by_key(|c| c.position);
+
+        let page_order: Vec<i32> = chunks.iter().filter_map(|c| c.page_number).collect();
+        let mut expected = page_order.clone();
+        expected.sort_unstable();
+        assert_eq!(page_order, expected, "pages must not interleave");
+    }
+
+    #[test]
+    fn a_single_page_document_is_unaffected() {
+        let chunks = chunk_pages(&[("A short page of text.", 1)]);
+        assert_eq!(chunks.len(), 1);
+        assert_eq!(chunks[0].position, 0);
+    }
+
+    #[test]
+    fn page_numbers_survive_renumbering() {
+        /* Citations name the page, so renumbering position must not disturb it. */
+        let long = "word ".repeat(1200);
+        let chunks = chunk_pages(&[(long.as_str(), 7), (long.as_str(), 8)]);
+        assert!(chunks.iter().any(|c| c.page_number == Some(7)));
+        assert!(chunks.iter().any(|c| c.page_number == Some(8)));
+    }
 }
