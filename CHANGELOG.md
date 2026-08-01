@@ -4,6 +4,24 @@ All notable changes to NotebookLab will be documented in this file.
 
 ## [Unreleased]
 
+## [0.8.1] - 2026-08-01
+
+### Fixed
+
+- Multi-page documents were read out of order. Chunk positions were numbered from
+  zero for each page, so a ten-page PDF held ten chunks numbered 0, ten numbered
+  1, and so on. Everything that reads a document back orders by position, so the
+  pages interleaved: a transform assembled the first chunk of every page, then the
+  second chunk of every page, rather than the document in reading order. Positions
+  now run continuously across the whole document.
+
+### Changed
+
+- Removed autoprefixer and postcss, which Tailwind 4 makes unnecessary. The
+  generated stylesheet is byte-identical without them, which is what confirmed
+  they were doing nothing.
+
+
 ## [0.8.0] - 2026-08-01
 
 ### Added
