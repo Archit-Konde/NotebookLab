@@ -4,6 +4,8 @@ All notable changes to NotebookLab will be documented in this file.
 
 ## [Unreleased]
 
+## [0.8.4] - 2026-08-01
+
 ### Fixed
 
 - Generation over a whole notebook read only one document. When no sources were
