@@ -205,13 +205,26 @@ fn populate(
         )?;
 
         if !doc.chunks.is_empty() {
-            let chunks = doc
-                .chunks
+            /* Positions are rebuilt rather than copied. A bundle carries whatever
+            the exporting install held, and installs before 0.8.1 numbered chunks
+            from zero for every page, so their documents read out of order. The
+            migration repairs the local library once at startup, which a bundle
+            imported afterwards would sidestep entirely, leaving a scrambled
+            document with nothing left to fix it. Sorting by page and then by the
+            recorded position recovers reading order from either shape.
+
+            The sort is stable, so chunks that share a page and a position keep
+            the order the bundle lists them in, which is the order they were
+            exported and therefore the order they were read. */
+            let mut incoming = doc.chunks;
+            incoming.sort_by_key(|chunk| (chunk.page_number.unwrap_or(-1), chunk.position));
+            let chunks = incoming
                 .into_iter()
-                .map(|chunk| CreateChunk {
+                .enumerate()
+                .map(|(index, chunk)| CreateChunk {
                     document_id: created.id.clone(),
                     content: chunk.content,
-                    position: chunk.position,
+                    position: index as i32,
                     page_number: chunk.page_number,
                     heading_context: chunk.heading_context,
                     token_count: chunk.token_count,
@@ -340,6 +353,97 @@ mod tests {
         let id = write_bundle(&conn, bundle(&long)).unwrap();
         let created = notebook_repository::get_by_id(&conn, &id).unwrap();
         assert!(created.name.len() <= MAX_NAME_BYTES);
+    }
+
+    #[test]
+    fn an_import_rebuilds_chunk_order_from_an_old_bundle() {
+        /* A bundle exported by an install before 0.8.1 carries per-page
+        positions: every page numbered from zero. Migration 007 repairs the
+        library once at startup, so a bundle imported after that point would
+        keep its scrambled order forever unless the import fixes it. */
+        let conn = memory_db();
+        let mut b = bundle("Old export");
+        let chunks = (1..=3)
+            .flat_map(|page| {
+                (0..2).map(move |position| BundleChunk {
+                    content: format!("page {page} part {position}"),
+                    position,
+                    page_number: Some(page),
+                    heading_context: String::new(),
+                    token_count: 3,
+                })
+            })
+            .collect();
+        b.documents.push(BundleDocument {
+            title: "Scrambled".into(),
+            file_type: "pdf".into(),
+            file_hash: "old".into(),
+            file_size: 10,
+            chunks,
+        });
+
+        let id = write_bundle(&conn, b).unwrap();
+        let docs = document_repository::list_by_notebook(&conn, &id).unwrap();
+        let stored = chunk_repository::get_by_document(&conn, &docs[0].id).unwrap();
+
+        assert_eq!(
+            stored.iter().map(|c| c.position).collect::<Vec<_>>(),
+            (0..6).collect::<Vec<i32>>(),
+            "positions must be renumbered continuously"
+        );
+        let expected: Vec<String> = (1..=3)
+            .flat_map(|page| (0..2).map(move |part| format!("page {page} part {part}")))
+            .collect();
+        assert_eq!(
+            stored.iter().map(|c| c.content.clone()).collect::<Vec<_>>(),
+            expected,
+            "pages must read in order, not interleave"
+        );
+    }
+
+    #[test]
+    fn an_import_keeps_the_order_of_a_pageless_bundle() {
+        /* Text and Markdown carry no page number. Sorting must fall back to the
+        recorded position rather than collapsing them into bundle order. */
+        let conn = memory_db();
+        let mut b = bundle("Pageless");
+        b.documents.push(BundleDocument {
+            title: "Notes".into(),
+            file_type: "txt".into(),
+            file_hash: "txt".into(),
+            file_size: 10,
+            chunks: vec![
+                BundleChunk {
+                    content: "third".into(),
+                    position: 2,
+                    page_number: None,
+                    heading_context: String::new(),
+                    token_count: 1,
+                },
+                BundleChunk {
+                    content: "first".into(),
+                    position: 0,
+                    page_number: None,
+                    heading_context: String::new(),
+                    token_count: 1,
+                },
+                BundleChunk {
+                    content: "second".into(),
+                    position: 1,
+                    page_number: None,
+                    heading_context: String::new(),
+                    token_count: 1,
+                },
+            ],
+        });
+
+        let id = write_bundle(&conn, b).unwrap();
+        let docs = document_repository::list_by_notebook(&conn, &id).unwrap();
+        let stored = chunk_repository::get_by_document(&conn, &docs[0].id).unwrap();
+        assert_eq!(
+            stored.iter().map(|c| c.content.clone()).collect::<Vec<_>>(),
+            vec!["first", "second", "third"]
+        );
     }
 
     #[test]
