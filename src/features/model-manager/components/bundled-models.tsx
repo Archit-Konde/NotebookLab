@@ -200,8 +200,13 @@ export function BundledModels({ onDownloaded }: BundledModelsProps) {
                       />
                     </div>
                     <p className="text-2xs font-mono text-text-4 mt-1" aria-live="polite">
-                      {formatBytes(progress?.downloaded ?? 0)} of {formatBytes(progress?.total ?? 0)}{" "}
-                      ({(progress?.percent ?? 0).toFixed(0)}%)
+                      {/* A server that sends no content-length leaves the total at
+                          zero, which read as "12 MB of 0 B (0%)": a bar frozen at
+                          nothing while the download was in fact running. Show the
+                          bytes that are known instead of a percentage that is not. */}
+                      {progress && progress.total > 0
+                        ? `${formatBytes(progress.downloaded)} of ${formatBytes(progress.total)} (${progress.percent.toFixed(0)}%)`
+                        : `${formatBytes(progress?.downloaded ?? 0)} downloaded`}
                     </p>
                   </div>
                 )}

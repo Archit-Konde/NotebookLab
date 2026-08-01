@@ -215,6 +215,29 @@ fn host_is_allowed(url: &str) -> bool {
 /// Global download guard: prevents concurrent downloads.
 static DOWNLOAD_IN_PROGRESS: AtomicBool = AtomicBool::new(false);
 
+/// Holds the download guard and releases it however the download ends, a panic
+/// in the worker thread included. Releasing it by hand at each exit meant every
+/// new early return had to remember to do so, and a missed one leaves the app
+/// refusing every later download until it is restarted, with nothing on screen
+/// to explain the refusal.
+struct DownloadGuard;
+
+impl DownloadGuard {
+    /// Take the guard, or None when a download is already running.
+    fn acquire() -> Option<Self> {
+        DOWNLOAD_IN_PROGRESS
+            .compare_exchange(false, true, Ordering::AcqRel, Ordering::Acquire)
+            .ok()
+            .map(|_| DownloadGuard)
+    }
+}
+
+impl Drop for DownloadGuard {
+    fn drop(&mut self) {
+        DOWNLOAD_IN_PROGRESS.store(false, Ordering::Release);
+    }
+}
+
 /// Progress event emitted to the frontend during download.
 #[derive(Clone, serde::Serialize)]
 pub struct DownloadProgress {
@@ -242,22 +265,19 @@ fn download_model(
     url: Option<String>,
     filename: Option<String>,
 ) -> AppResult<String> {
-    /* Prevent concurrent downloads */
-    if DOWNLOAD_IN_PROGRESS
-        .compare_exchange(false, true, Ordering::AcqRel, Ordering::Acquire)
-        .is_err()
-    {
+    /* Prevent concurrent downloads. The guard releases itself on every path
+    out of this function, including the ones that return early below. */
+    let Some(guard) = DownloadGuard::acquire() else {
         return Err(AppError::InvalidInput(
             "A download is already in progress".into(),
         ));
-    }
+    };
 
     let download_url = url.as_deref().unwrap_or(DEFAULT_MODEL_URL);
 
     /* Sanitize filename: reject path separators and traversal */
     let model_name = filename.as_deref().unwrap_or(DEFAULT_MODEL_NAME);
     if model_name.contains('/') || model_name.contains('\\') || model_name.contains("..") {
-        DOWNLOAD_IN_PROGRESS.store(false, Ordering::Release);
         return Err(AppError::InvalidInput(
             "Invalid filename: must not contain path separators".into(),
         ));
@@ -265,14 +285,12 @@ fn download_model(
 
     /* Validate URL: must be HTTPS and from an allowed host */
     if !download_url.starts_with("https://") {
-        DOWNLOAD_IN_PROGRESS.store(false, Ordering::Release);
         return Err(AppError::InvalidInput(
             "Model download URL must use HTTPS".into(),
         ));
     }
 
     if !host_is_allowed(download_url) {
-        DOWNLOAD_IN_PROGRESS.store(false, Ordering::Release);
         return Err(AppError::InvalidInput(format!(
             "Downloads only allowed from: {}",
             ALLOWED_HOSTS.join(", ")
@@ -280,15 +298,13 @@ fn download_model(
     }
 
     /* Resolve output path */
-    let data_dir = app.path().app_data_dir().map_err(|e| {
-        DOWNLOAD_IN_PROGRESS.store(false, Ordering::Release);
-        AppError::Internal(format!("Failed to resolve data dir: {e}"))
-    })?;
+    let data_dir = app
+        .path()
+        .app_data_dir()
+        .map_err(|e| AppError::Internal(format!("Failed to resolve data dir: {e}")))?;
     let models_dir = data_dir.join("models").join("gguf");
-    std::fs::create_dir_all(&models_dir).map_err(|e| {
-        DOWNLOAD_IN_PROGRESS.store(false, Ordering::Release);
-        AppError::Internal(format!("Failed to create models dir: {e}"))
-    })?;
+    std::fs::create_dir_all(&models_dir)
+        .map_err(|e| AppError::Internal(format!("Failed to create models dir: {e}")))?;
 
     let output_path = models_dir.join(model_name);
 
@@ -301,7 +317,6 @@ fn download_model(
             .map(|m| m.len())
             .unwrap_or(0);
         if size > 0 {
-            DOWNLOAD_IN_PROGRESS.store(false, Ordering::Release);
             tracing::info!(
                 "Model already exists: {} ({} MB)",
                 model_name,
@@ -331,6 +346,9 @@ fn download_model(
     let path_owned = output_path.clone();
 
     std::thread::spawn(move || {
+        /* Held for the life of the download, and dropped when this thread ends
+        by any route: success, error, or panic. */
+        let _guard = guard;
         let result = do_download(&app_clone, &url_owned, &name_owned, &path_owned);
 
         if let Err(e) = result {
@@ -353,9 +371,6 @@ fn download_model(
                 )
                 .ok();
         }
-
-        /* Release download guard */
-        DOWNLOAD_IN_PROGRESS.store(false, Ordering::Release);
     });
 
     Ok(output_path.to_string_lossy().to_string())
@@ -427,6 +442,23 @@ fn do_download(
 
     file.flush()?;
     drop(file);
+
+    /* A body that stops early arrives as a clean end of stream, not an error,
+    so without this the partial file would be renamed into place and then
+    treated as installed for good: the "already downloaded" check only asks
+    whether the file exists and has a non-zero size, and nothing ever
+    re-downloads one that does. The result is a model that loads as garbage or
+    not at all, with no way to tell from the app that anything went wrong.
+
+    Only checkable when the server declared a length; without one, the size
+    cannot be confirmed here and the loader is left to reject a bad file. */
+    if total > 0 && downloaded != total {
+        let _ = std::fs::remove_file(&tmp_path);
+        return Err(format!(
+            "Download incomplete: received {downloaded} of {total} bytes. Check your connection and try again."
+        )
+        .into());
+    }
 
     /* Rename temp file to final name */
     std::fs::rename(&tmp_path, output_path)?;
@@ -546,5 +578,57 @@ mod host_tests {
         assert!(host_is_allowed("https://huggingface.co?x=1"));
         assert!(!host_is_allowed("https://evil.example?x=huggingface.co"));
         assert!(!host_is_allowed("https://evil.example#huggingface.co"));
+    }
+}
+
+#[cfg(test)]
+mod guard_tests {
+    use super::{DownloadGuard, DOWNLOAD_IN_PROGRESS};
+    use std::sync::atomic::Ordering;
+
+    /// Every assertion about the guard lives in one test on purpose: it is a
+    /// process-wide flag, and Rust runs tests in parallel, so two tests taking
+    /// it would fight over the same static and fail at random.
+    #[test]
+    fn the_download_guard_admits_one_holder_and_always_releases() {
+        assert!(
+            !DOWNLOAD_IN_PROGRESS.load(Ordering::Acquire),
+            "nothing should hold the guard before this test"
+        );
+
+        {
+            let _first = DownloadGuard::acquire().expect("the guard should be free");
+            assert!(
+                DownloadGuard::acquire().is_none(),
+                "a second download must be refused while one is running"
+            );
+        }
+
+        assert!(
+            !DOWNLOAD_IN_PROGRESS.load(Ordering::Acquire),
+            "leaving the scope must release the guard"
+        );
+        assert!(
+            DownloadGuard::acquire().is_some(),
+            "the guard must be reusable after a completed download"
+        );
+        assert!(
+            !DOWNLOAD_IN_PROGRESS.load(Ordering::Acquire),
+            "the temporary above should have released on drop"
+        );
+
+        /* The reason the guard exists rather than a store at each exit: a panic
+        in the download thread used to leave the flag set, and the app then
+        refused every later download until it was restarted, saying one was
+        already in progress when none was. */
+        let panicked = std::panic::catch_unwind(|| {
+            let _guard = DownloadGuard::acquire().expect("the guard should be free");
+            panic!("the download thread died");
+        });
+        assert!(panicked.is_err(), "the panic should have propagated");
+        assert!(
+            !DOWNLOAD_IN_PROGRESS.load(Ordering::Acquire),
+            "a panicking download must not leave downloads blocked for good"
+        );
     }
 }

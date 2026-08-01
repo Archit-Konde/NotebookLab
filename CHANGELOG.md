@@ -6,6 +6,24 @@ All notable changes to NotebookLab will be documented in this file.
 
 ### Fixed
 
+- A model download that stopped early was installed anyway. A body that ends
+  before its declared length arrives as a clean end of stream rather than an
+  error, so the partial file was renamed into place, and because the check for
+  an existing model only asks whether a file is there and non-empty, nothing
+  ever replaced it. The result was a corrupt model that failed to load with no
+  sign of why. The size is now confirmed before the file is put in place, and a
+  short download is deleted and reported.
+- A download that failed hard could block every later one. The flag marking a
+  download in progress was cleared by hand on each path out, so a panic in the
+  download thread left it set and the app then refused new downloads, claiming
+  one was already running, until it was restarted. It is now released
+  automatically however the download ends.
+- A download from a server that sends no content length showed "12 MB of 0 B
+  (0%)" with the bar stuck at nothing while it was in fact running. It now
+  reports the bytes it has.
+
+### Fixed
+
 - Automatic model selection sized a request by bytes divided by four when
   deciding whether a provider's context window could hold it. That rule reads a
   CJK character as three quarters of a token when it is nearer one, so a request
