@@ -401,7 +401,10 @@ mod tests {
 
         let sources = get_citation_sources(&conn, &message.id).unwrap();
         assert_eq!(
-            sources.iter().map(|s| s.chunk_id.as_str()).collect::<Vec<_>>(),
+            sources
+                .iter()
+                .map(|s| s.chunk_id.as_str())
+                .collect::<Vec<_>>(),
             vec!["strong", "middling", "weak"],
             "the strongest source must be offered first"
         );
