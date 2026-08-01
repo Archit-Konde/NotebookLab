@@ -6,6 +6,17 @@ All notable changes to NotebookLab will be documented in this file.
 
 ### Fixed
 
+- Generation over a whole notebook read only one document. When no sources were
+  picked by hand, the Studio and the Thinking Partner asked for a spread of
+  passages across the notebook, but the query ordered every chunk by document
+  date and took the first twenty, which is the opening of the newest document
+  and nothing else: any real document has more than twenty chunks, so the rest
+  of the library was never reached. A study guide, a mind map and a briefing
+  built from a ten-source notebook were all built from one source, and all from
+  the same opening passages, which is a large part of why different formats came
+  back so alike. The spread is now taken evenly across every document, the same
+  way an explicit selection already was.
+
 - A model download that stopped early was installed anyway. A body that ends
   before its declared length arrives as a clean end of stream rather than an
   error, so the partial file was renamed into place, and because the check for
