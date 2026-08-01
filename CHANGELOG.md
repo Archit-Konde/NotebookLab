@@ -4,6 +4,20 @@ All notable changes to NotebookLab will be documented in this file.
 
 ## [Unreleased]
 
+## [0.8.2] - 2026-08-01
+
+### Fixed
+
+- Documents imported before 0.8.1 are repaired in place on first launch. The
+  previous release stopped new imports from being stored out of order, but left
+  every document already in the library scrambled, fixable only by knowing to
+  re-import it. A migration now renumbers those chunks into reading order.
+  Documents that were already numbered correctly are left untouched.
+
+Re-importing is still worth it for documents in Chinese, Japanese, Korean, Thai
+or Lao added before 0.7.5: those were stored as a single chunk, and only a fresh
+import can split them.
+
 ## [0.8.1] - 2026-08-01
 
 ### Fixed

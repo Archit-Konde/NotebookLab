@@ -157,6 +157,7 @@ impl AppState {
             include_str!("../resources/migrations/004_embeddings.sql"),
             include_str!("../resources/migrations/005_canvas.sql"),
             include_str!("../resources/migrations/006_providers.sql"),
+            include_str!("../resources/migrations/007_chunk_positions.sql"),
         ];
 
         /* Track the applied version in the database so each migration runs
@@ -182,5 +183,171 @@ impl AppState {
             migrations.len()
         );
         Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use rusqlite::Connection;
+
+    /// The repair in 007, applied to a database that already carries it, so the
+    /// bug shape can be created first and then fixed.
+    const RENUMBER: &str = include_str!("../resources/migrations/007_chunk_positions.sql");
+
+    fn migrated() -> Connection {
+        let conn = Connection::open_in_memory().expect("open");
+        super::AppState::run_migrations(&conn).expect("migrate");
+        conn
+    }
+
+    fn seed_document(conn: &Connection, id: &str) {
+        conn.execute(
+            "INSERT OR IGNORE INTO notebooks (id, name) VALUES ('nb', 'Notebook')",
+            [],
+        )
+        .expect("notebook");
+        conn.execute(
+            "INSERT INTO documents (id, notebook_id, title, file_path, file_hash, file_type, file_size)
+             VALUES (?1, 'nb', ?1, '/x', ?1, 'pdf', 1)",
+            [id],
+        )
+        .expect("document");
+    }
+
+    fn positions(conn: &Connection, document: &str) -> Vec<i64> {
+        let mut stmt = conn
+            .prepare("SELECT position FROM chunks WHERE document_id = ?1 ORDER BY position")
+            .expect("prepare");
+        let rows = stmt
+            .query_map([document], |row| row.get(0))
+            .expect("query")
+            .collect::<Result<Vec<i64>, _>>()
+            .expect("collect");
+        rows
+    }
+
+    #[test]
+    fn every_migration_applies_to_a_fresh_database() {
+        let conn = migrated();
+        let version: i64 = conn
+            .query_row("PRAGMA user_version", [], |row| row.get(0))
+            .expect("version");
+        assert_eq!(version, 7, "user_version must track the migration count");
+    }
+
+    #[test]
+    fn renumbering_repairs_a_document_imported_before_the_fix() {
+        /* Before v0.8.1 the chunker was called once per page and numbered from
+        zero each time, so a three-page document held three chunks numbered 0,
+        three numbered 1, and so on. Readers order by position, so the pages
+        interleaved. */
+        let conn = migrated();
+        seed_document(&conn, "broken");
+        for page in 1..=3 {
+            for position in 0..3 {
+                conn.execute(
+                    "INSERT INTO chunks (id, document_id, content, position, page_number)
+                     VALUES (?1, 'broken', ?2, ?3, ?4)",
+                    rusqlite::params![
+                        format!("b{page}{position}"),
+                        format!("page {page} part {position}"),
+                        position,
+                        page
+                    ],
+                )
+                .expect("chunk");
+            }
+        }
+
+        conn.execute_batch(RENUMBER).expect("renumber");
+
+        assert_eq!(positions(&conn, "broken"), (0..9).collect::<Vec<i64>>());
+
+        let mut stmt = conn
+            .prepare("SELECT content FROM chunks WHERE document_id='broken' ORDER BY position")
+            .expect("prepare");
+        let order = stmt
+            .query_map([], |row| row.get::<_, String>(0))
+            .expect("query")
+            .collect::<Result<Vec<String>, _>>()
+            .expect("collect");
+        let expected: Vec<String> = (1..=3)
+            .flat_map(|page| (0..3).map(move |part| format!("page {page} part {part}")))
+            .collect();
+        assert_eq!(order, expected, "pages must read in order, not interleave");
+    }
+
+    #[test]
+    fn renumbering_leaves_a_correctly_numbered_document_alone() {
+        let conn = migrated();
+        seed_document(&conn, "fine");
+        for position in 0..5 {
+            conn.execute(
+                "INSERT INTO chunks (id, document_id, content, position, page_number)
+                 VALUES (?1, 'fine', 'text', ?2, 1)",
+                rusqlite::params![format!("f{position}"), position],
+            )
+            .expect("chunk");
+        }
+
+        conn.execute_batch(RENUMBER).expect("renumber");
+
+        assert_eq!(positions(&conn, "fine"), (0..5).collect::<Vec<i64>>());
+    }
+
+    #[test]
+    fn renumbering_runs_twice_without_changing_anything_further() {
+        /* Migrations are guarded by user_version, but a repair that only works
+        once is a repair that cannot be re-run to check it. */
+        let conn = migrated();
+        seed_document(&conn, "twice");
+        for page in 1..=2 {
+            for position in 0..2 {
+                conn.execute(
+                    "INSERT INTO chunks (id, document_id, content, position, page_number)
+                     VALUES (?1, 'twice', 'text', ?2, ?3)",
+                    rusqlite::params![format!("t{page}{position}"), position, page],
+                )
+                .expect("chunk");
+            }
+        }
+
+        conn.execute_batch(RENUMBER).expect("first");
+        let after_first = positions(&conn, "twice");
+        conn.execute_batch(RENUMBER).expect("second");
+
+        assert_eq!(after_first, (0..4).collect::<Vec<i64>>());
+        assert_eq!(positions(&conn, "twice"), after_first);
+    }
+
+    #[test]
+    fn full_text_search_still_finds_a_renumbered_chunk() {
+        /* The FTS index is keyed on rowid and synced by insert and delete
+        triggers. Renumbering must not disturb it, which holds only because the
+        repair updates a column and never rewrites a row. */
+        let conn = migrated();
+        seed_document(&conn, "search");
+        for page in 1..=2 {
+            for position in 0..2 {
+                conn.execute(
+                    "INSERT INTO chunks (id, document_id, content, position, page_number)
+                     VALUES (?1, 'search', 'quantum entanglement', ?2, ?3)",
+                    rusqlite::params![format!("s{page}{position}"), position, page],
+                )
+                .expect("chunk");
+            }
+        }
+
+        conn.execute_batch(RENUMBER).expect("renumber");
+
+        let hits: i64 = conn
+            .query_row(
+                "SELECT COUNT(*) FROM chunks_fts f JOIN chunks c ON c.rowid = f.rowid
+                 WHERE chunks_fts MATCH 'entanglement'",
+                [],
+                |row| row.get(0),
+            )
+            .expect("search");
+        assert_eq!(hits, 4, "every chunk must still be reachable by search");
     }
 }
