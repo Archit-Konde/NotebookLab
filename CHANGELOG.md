@@ -4,6 +4,16 @@ All notable changes to NotebookLab will be documented in this file.
 
 ## [Unreleased]
 
+### Fixed
+
+- The GPU probe behind the Models page could wait forever. It shells out to
+  nvidia-smi, which hangs when a driver is wedged or a card is mid-reset, and
+  nothing bounded that wait, so an optional detail could stall the page a new
+  user needs to reach a working model. It now gives up after five seconds and
+  falls back to recommending by RAM.
+- A graphics card whose name contains a comma is read correctly, and a card that
+  reports no memory figure is still named rather than discarded.
+
 ## [0.8.3] - 2026-08-01
 
 ### Fixed
