@@ -4,6 +4,13 @@ All notable changes to NotebookLab will be documented in this file.
 
 ## [Unreleased]
 
+### Fixed
+
+- Saving an audio file on Windows put a PowerShell console window on top of the
+  app for the whole of synthesis, which for a full script is many seconds of a
+  black box the user did not ask for. The speech process is now started hidden,
+  the same way the graphics probe already was.
+
 ## [0.8.4] - 2026-08-01
 
 ### Fixed

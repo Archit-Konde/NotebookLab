@@ -96,13 +96,22 @@ fn synthesize(source: &Path, out: &Path) -> AppResult<()> {
         $synth.Speak([System.IO.File]::ReadAllText($env:NOTEBOOKLAB_AUDIO_IN))
         $synth.Dispose()";
 
-    run(
-        Command::new("powershell")
-            .args(["-NoProfile", "-NonInteractive", "-Command", script])
-            .env("NOTEBOOKLAB_AUDIO_IN", source)
-            .env("NOTEBOOKLAB_AUDIO_OUT", out),
-        "Windows speech",
-    )
+    let mut command = Command::new("powershell");
+    command
+        .args(["-NoProfile", "-NonInteractive", "-Command", script])
+        .env("NOTEBOOKLAB_AUDIO_IN", source)
+        .env("NOTEBOOKLAB_AUDIO_OUT", out);
+
+    /* Without this the console window belonging to PowerShell appears on top of
+    the app for as long as synthesis runs, which for a full script is many
+    seconds of a black box the user did not ask for and cannot dismiss. */
+    {
+        use std::os::windows::process::CommandExt;
+        const CREATE_NO_WINDOW: u32 = 0x0800_0000;
+        command.creation_flags(CREATE_NO_WINDOW);
+    }
+
+    run(&mut command, "Windows speech")
 }
 
 #[cfg(target_os = "macos")]
