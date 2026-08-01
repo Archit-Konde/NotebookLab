@@ -16,10 +16,10 @@
     "noEmit": true,
     "jsx": "react-jsx",
 
-    /* Path aliases */
-    "baseUrl": "..",
+    /* Path aliases. TypeScript 7 removed baseUrl; paths now resolve relative
+       to this file, so the mapping walks up out of config/ itself. */
     "paths": {
-      "@/*": ["./src/*"]
+      "@/*": ["../src/*"]
     },
 
     /* Linting */
