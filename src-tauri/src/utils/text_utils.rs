@@ -21,6 +21,56 @@ pub fn escape_like_pattern(query: &str) -> String {
     format!("%{escaped}%")
 }
 
+/// Remove an XML-style wrapper a model has put around its whole answer.
+///
+/// Every prompt here delivers document text inside tags such as
+/// `<document_context>`, because that is what keeps source material as data
+/// rather than instructions. Models mirror the style back: asked to extract key
+/// points, one returns the list wrapped in `<extraction_results>`, and the user
+/// sees the tag sitting above and below their answer.
+///
+/// Only a matching pair enclosing the entire text is removed, and only when the
+/// name looks like something a model invented: lowercase, no attributes. That
+/// leaves real content alone, including HTML in a code block, which never has
+/// the whole answer as a single element with nothing outside it.
+pub fn strip_wrapper_tags(text: &str) -> &str {
+    let mut current = text.trim();
+
+    /* A model occasionally nests two of them. Bounded so a pathological input
+    cannot spin here. */
+    for _ in 0..3 {
+        let Some(stripped) = strip_one_wrapper(current) else {
+            break;
+        };
+        current = stripped;
+    }
+    current
+}
+
+/// Remove one wrapper, or return None when the text is not wrapped.
+fn strip_one_wrapper(text: &str) -> Option<&str> {
+    let rest = text.strip_prefix('<')?;
+    let name_end = rest.find('>')?;
+    let name = &rest[..name_end];
+
+    /* No attributes and no closing slash: a bare tag, which is what a model
+    emits. Anything richer is likelier to be real content. */
+    if name.is_empty()
+        || name.len() > 40
+        || !name
+            .chars()
+            .all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || c == '_' || c == '-')
+    {
+        return None;
+    }
+
+    let closing = format!("</{name}>");
+    let inner = rest[name_end + 1..].trim_end();
+    let inner = inner.strip_suffix(closing.as_str())?;
+
+    Some(inner.trim())
+}
+
 /// Strip a leading `<think>...</think>` block from model output.
 /// Reasoning models (DeepSeek R1, Qwen with thinking on) emit their hidden
 /// chain of thought before the answer; showing it verbatim buries the answer
@@ -63,6 +113,58 @@ pub fn truncate_to_char_boundary(text: &str, max_bytes: usize) -> &str {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_model_invented_wrapper_is_removed() {
+        /* Exactly what the user saw above and below their key points. */
+        let out = strip_wrapper_tags("<extraction_results>\n- One\n- Two\n</extraction_results>");
+        assert_eq!(out, "- One\n- Two");
+    }
+
+    #[test]
+    fn nested_wrappers_are_removed() {
+        let out = strip_wrapper_tags("<results><summary>Body text</summary></results>");
+        assert_eq!(out, "Body text");
+    }
+
+    #[test]
+    fn ordinary_text_is_untouched() {
+        assert_eq!(strip_wrapper_tags("Just an answer."), "Just an answer.");
+        assert_eq!(strip_wrapper_tags("- One\n- Two"), "- One\n- Two");
+        assert_eq!(strip_wrapper_tags(""), "");
+    }
+
+    #[test]
+    fn markdown_and_code_survive() {
+        /* An answer that merely contains a tag must not be mangled; only a pair
+        wrapping the entire thing counts. */
+        let html = "Use this:\n\n```html\n<div>hello</div>\n```";
+        assert_eq!(strip_wrapper_tags(html), html);
+        let heading = "# Key points\n\n- One";
+        assert_eq!(strip_wrapper_tags(heading), heading);
+    }
+
+    #[test]
+    fn an_unmatched_tag_is_left_alone() {
+        /* Removing the opener without its closer would change meaning on a
+        guess. Better to leave it than to cut the wrong thing. */
+        let text = "<results>\n- One";
+        assert_eq!(strip_wrapper_tags(text), text);
+    }
+
+    #[test]
+    fn a_tag_with_attributes_is_left_alone() {
+        /* Real markup, not a model's mirror of the prompt style. */
+        let text = "<div class=\"x\">content</div>";
+        assert_eq!(strip_wrapper_tags(text), text);
+    }
+
+    #[test]
+    fn a_wrapper_around_only_part_of_the_answer_is_kept() {
+        /* The closing tag is not at the end, so this is content, not a wrapper. */
+        let text = "<note>a</note> and then more prose";
+        assert_eq!(strip_wrapper_tags(text), text);
+    }
 
     #[test]
     fn strip_reasoning_removes_closed_leading_block() {

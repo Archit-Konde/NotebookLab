@@ -344,7 +344,7 @@ pub fn call_llm_streaming(
         .map_err(|e| AppError::Provider(e.to_string()))?,
     };
 
-    Ok(response.content)
+    Ok(crate::utils::text_utils::strip_wrapper_tags(&response.content).to_string())
 }
 
 /// Phase 3: Save response and citations (needs db lock).

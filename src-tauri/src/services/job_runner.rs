@@ -261,7 +261,14 @@ pub fn spawn(
             handle.finish_phase(jobs, PHASE_GENERATE);
 
             handle.begin(jobs, PHASE_FINALIZE);
-            let finished = finish(response.content)?;
+            /* Models mirror the prompt's XML style back and wrap their whole
+            answer in an invented tag, which the user then reads above and below
+            their result. Stripped once here so every feature is covered rather
+            than each remembering to. JSON formats are unaffected: they do not
+            begin with a tag. */
+            let cleaned =
+                crate::utils::text_utils::strip_wrapper_tags(&response.content).to_string();
+            let finished = finish(cleaned)?;
             handle.finish_phase(jobs, PHASE_FINALIZE);
             Ok(finished)
         })();

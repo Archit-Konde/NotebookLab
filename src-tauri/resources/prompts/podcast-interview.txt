@@ -31,3 +31,4 @@ which cannot infer emphasis, so the words have to carry it:
 - Let a speaker occasionally react before answering, the way people do: "Right,
   so the interesting part is...", "That surprised me too." Sparingly, and only
   where it is natural.
+Output only the result itself. Never wrap the output in XML tags, and never repeat the tags used to deliver the source text.
