@@ -6,6 +6,13 @@ All notable changes to NotebookLab will be documented in this file.
 
 ### Fixed
 
+- Automatic model selection sized a request by bytes divided by four when
+  deciding whether a provider's context window could hold it. That rule reads a
+  CJK character as three quarters of a token when it is nearer one, so a request
+  in those scripts looked about a quarter smaller than it was and could be routed
+  to a window it would overflow, which a server answers by truncating rather than
+  refusing. The router and the RAG packer now share one estimator, so they cannot
+  disagree about how big a prompt is.
 - The GPU probe behind the Models page could wait forever. It shells out to
   nvidia-smi, which hangs when a driver is wedged or a card is mid-reset, and
   nothing bounded that wait, so an optional detail could stall the page a new

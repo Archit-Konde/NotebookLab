@@ -10,6 +10,35 @@
  * Date: 2026-07-12
  */
 
+/// Rough token estimate, used only for context budgeting. Never for the usage
+/// display, which shows real numbers reported by providers.
+///
+/// Bytes divided by four is a fair rule for English. It is not for CJK, where a
+/// character is three bytes and roughly one token, so the same rule guesses
+/// three quarters of the real cost and the prompt is built too large. Since the
+/// only consequence of over-running is the server silently truncating the system
+/// prompt away, the estimate has to err high on that text, not low.
+///
+/// This lives here rather than beside one caller because two decisions depend on
+/// it and they have to agree: how much of the context the RAG prompt may fill,
+/// and whether a provider's window can hold a request at all. A router using the
+/// naive rule would rule a request small enough for a model the packer had
+/// already judged it too big for.
+pub fn estimate_tokens(text: &str) -> u32 {
+    let mut bytes = 0usize;
+    let mut wide = 0usize;
+    for c in text.chars() {
+        let len = c.len_utf8();
+        if len >= 3 {
+            /* Roughly one token each: count directly rather than by byte. */
+            wide += 1;
+        } else {
+            bytes += len;
+        }
+    }
+    (bytes / 4 + wide + 1) as u32
+}
+
 /// Escape SQL LIKE metacharacters in user input for safe pattern matching.
 /// Returns a pattern wrapped in % for substring search.
 pub fn escape_like_pattern(query: &str) -> String {

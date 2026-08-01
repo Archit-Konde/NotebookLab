@@ -33,28 +33,7 @@ const MIN_USEFUL_SOURCE_TOKENS: u32 = 256;
 /* The note map stays small: it is a hint, not the payload. */
 const NOTE_MAP_MAX_EDGES: usize = 40;
 
-/// Rough token estimate, used only for context budgeting. Never for the usage
-/// display, which shows real numbers reported by providers.
-///
-/// Bytes divided by four is a fair rule for English. It is not for CJK, where a
-/// character is three bytes and roughly one token, so the same rule guesses
-/// three quarters of the real cost and the prompt is built too large. Since the
-/// only consequence of over-running is the server silently truncating the system
-/// prompt away, the estimate has to err high on that text, not low.
-fn estimate_tokens(text: &str) -> u32 {
-    let mut bytes = 0usize;
-    let mut wide = 0usize;
-    for c in text.chars() {
-        let len = c.len_utf8();
-        if len >= 3 {
-            /* Roughly one token each: count directly rather than by byte. */
-            wide += 1;
-        } else {
-            bytes += len;
-        }
-    }
-    (bytes / 4 + wide + 1) as u32
-}
+use crate::utils::text_utils::estimate_tokens;
 
 /// A retrieved source chunk with its real relevance score, kept so citations
 /// reflect the retrieval ranking instead of invented numbers.
