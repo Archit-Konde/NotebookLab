@@ -4,6 +4,18 @@ All notable changes to NotebookLab will be documented in this file.
 
 ## [Unreleased]
 
+### Fixed
+
+- The sample notebook sent new users to features by the wrong name. The welcome
+  note told them to open the "Thinking Partner", which the sidebar labels
+  "Think", so the first thing a new user was told to do could not be found. The
+  sample content now names every tool exactly as the sidebar does, and a test
+  reads the sidebar to keep the two from drifting apart again.
+- Notebook bundles exported by a version before 0.8.1 carried scrambled chunk
+  order, and importing one after the repair migration had already run left it
+  scrambled for good. Imports now rebuild the reading order rather than trusting
+  the bundle.
+
 ## [0.8.2] - 2026-08-01
 
 ### Fixed

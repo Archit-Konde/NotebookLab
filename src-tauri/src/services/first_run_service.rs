@@ -76,7 +76,7 @@ Your thinking partner, on your machine.
 
 ## What you can do
 
-- **Import documents** (PDF, TXT, Markdown) and ask questions about them
+- **Import documents** (PDF, Word, text, Markdown, and images) and ask questions about them
 - **Write notes** with Markdown formatting and [[wiki-links]]
 - **Chat with your documents** using AI-powered RAG (Retrieval-Augmented Generation)
 - **Generate mind maps** from your research
@@ -87,7 +87,7 @@ Your thinking partner, on your machine.
 1. Go to **Models** in the sidebar and register an AI provider (Ollama is the easiest for local use)
 2. Import a document using the notebook detail page
 3. Open **Chat** and ask a question about your document
-4. Try the **Thinking Partner** to generate mind maps or Socratic questions
+4. Open **Think** in the sidebar to build an idea space or work through Socratic questions
 
 ## Wiki-links
 
@@ -211,14 +211,122 @@ Search. Search blends keyword ranking with semantic similarity. Keyword search a
 
 Chat. Ask questions about the documents in the active notebook and get answers grounded in cited sources. You can drop a file straight onto the chat to add it as a source first.
 
-The Studio. Turn a notebook's sources into study aids and write-ups: a study guide, flashcards, a quiz, a visual mind map, a timeline, a slide deck, a data table, a briefing doc, or a blog post. Each one is drawn from your own documents.
+Studio. Turn a notebook's sources into study aids and write-ups: a study guide, flashcards, a quiz, a visual mind map, a timeline, a slide deck, a data table, a briefing doc, or a blog post. Each one is drawn from your own documents.
 
-The Thinking Partner. Generate a mind map from your research, or switch to Socratic mode for probing questions that push your thinking further.
+Think. Build an idea space from your research, a moving three-dimensional map of the claims, evidence, tensions, and open questions in your sources. Or switch to Socratic mode for probing questions that push your thinking further.
 
-The Canvas. Every notebook has one open canvas for visual thinking. Draw freehand, add shapes and text, and drop in images, then pan, zoom, and rearrange.
+Transform. Run a source through a summary, a key-point extraction, or a prompt you write yourself.
+
+Canvas. Every notebook has one open canvas for visual thinking. Draw freehand, add shapes and text, and drop in images, then pan, zoom, and rearrange.
 
 Audio Studio. Your notebook, read aloud in your browser: a two-host discussion, a short brief, an interview, a lecture, a run of questions, a debate, or a critique.
 
 Prompt Studio. Describe a job in plain words and NotebookLab writes a complete, ready-to-run prompt for any AI model, choosing the right technique for the task.
 
 Sharing. Export a notebook to a single self-contained file, then import it on another machine to recreate it, fully offline."#;
+
+#[cfg(test)]
+mod tests {
+    use super::{SAMPLE_ABOUT, SAMPLE_GUIDE};
+
+    /* The sidebar is the source of truth for what each tool is called, so the
+    test reads it rather than restating the names. Sample content that tells a
+    new user to open something the sidebar labels differently sends them looking
+    for a menu item that does not exist, which is how "Thinking Partner" came to
+    point at a button labelled "Think".
+
+    If the frontend is reorganised this include stops compiling. That is a louder
+    failure than the silent drift it exists to catch. */
+    const SIDEBAR: &str = include_str!("../../../src/components/layout/app-sidebar.tsx");
+
+    /// Every tool the guide introduces, as the guide writes it.
+    const TOOLS_IN_GUIDE: [&str; 7] = [
+        "Search",
+        "Chat",
+        "Studio",
+        "Think",
+        "Transform",
+        "Audio Studio",
+        "Prompt Studio",
+    ];
+
+    fn sidebar_has_label(label: &str) -> bool {
+        SIDEBAR.contains(&format!("label: \"{label}\""))
+    }
+
+    #[test]
+    fn the_guide_names_every_tool_the_way_the_sidebar_does() {
+        for tool in TOOLS_IN_GUIDE {
+            assert!(
+                sidebar_has_label(tool),
+                "the guide sends the user to \"{tool}\", which is not a sidebar label"
+            );
+            assert!(
+                SAMPLE_GUIDE.contains(tool),
+                "the guide no longer mentions \"{tool}\""
+            );
+        }
+    }
+
+    #[test]
+    fn the_welcome_note_points_at_real_destinations() {
+        let welcome = welcome_note_content();
+        for destination in ["Models", "Think"] {
+            assert!(
+                sidebar_has_label(destination),
+                "the welcome note sends the user to \"{destination}\", which is not a sidebar label"
+            );
+            assert!(
+                welcome.contains(destination),
+                "the welcome note no longer mentions \"{destination}\""
+            );
+        }
+    }
+
+    #[test]
+    fn the_samples_do_not_promise_a_file_type_the_app_cannot_read() {
+        /* Parsers exist for PDF, Word, plain text, Markdown and images. Naming a
+        format the app cannot open is worse than naming none. */
+        for claimed in ["PDF", "Word", "Markdown"] {
+            assert!(
+                SAMPLE_ABOUT.contains(claimed) || SAMPLE_GUIDE.contains(claimed),
+                "no sample mentions {claimed}"
+            );
+        }
+        for absent in ["PowerPoint", "Excel", "EPUB", "spreadsheet"] {
+            assert!(
+                !SAMPLE_ABOUT.contains(absent) && !SAMPLE_GUIDE.contains(absent),
+                "the samples promise {absent}, which has no parser"
+            );
+        }
+    }
+
+    #[test]
+    fn the_sample_documents_chunk_into_reading_order() {
+        /* The samples go through the same chunker an import uses, so they are a
+        standing check that a single-call chunking still numbers continuously. */
+        for text in [SAMPLE_ABOUT, SAMPLE_GUIDE] {
+            let chunks = crate::services::chunking_service::chunk_text("doc", text, Some(1), "");
+            assert!(!chunks.is_empty(), "a sample produced no chunks");
+            let positions: Vec<i32> = chunks.iter().map(|c| c.position).collect();
+            assert_eq!(
+                positions,
+                (0..positions.len() as i32).collect::<Vec<_>>(),
+                "sample chunk positions must run continuously from zero"
+            );
+        }
+    }
+
+    /// The welcome note body, lifted from the seeding call so the test reads the
+    /// text that actually ships rather than a copy that can drift from it.
+    fn welcome_note_content() -> &'static str {
+        let source = include_str!("first_run_service.rs");
+        let start = source
+            .find("# Welcome to NotebookLab")
+            .expect("welcome note body");
+        let end = source[start..]
+            .find("\"#")
+            .expect("end of the welcome note literal");
+        &source[start..start + end]
+    }
+}
