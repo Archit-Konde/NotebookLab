@@ -43,6 +43,15 @@ pub fn start_api_server(db_path: PathBuf, api_token: String) {
             }
         };
 
+        /* WAL lets this reader run alongside the app's writer, but a checkpoint
+        still takes a lock the reader has to wait behind. The default timeout is
+        zero, which turns that brief overlap into an immediate "database is
+        locked" and a failed request. The writer already waits five seconds; a
+        reader that gives up sooner than the writer has no reason to. */
+        if let Err(e) = conn.execute_batch("PRAGMA busy_timeout = 5000;") {
+            tracing::warn!("REST API: could not set busy timeout: {e}");
+        }
+
         let addr = format!("127.0.0.1:{API_PORT}");
         let server = match Server::http(&addr) {
             Ok(s) => {

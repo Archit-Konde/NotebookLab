@@ -15,6 +15,15 @@ All notable changes to NotebookLab will be documented in this file.
   order, and importing one after the repair migration had already run left it
   scrambled for good. Imports now rebuild the reading order rather than trusting
   the bundle.
+- Chat history had no tie-break in its ordering. Two messages written inside the
+  same clock tick carry the same timestamp, and which came back first was then
+  left to the query planner. The window of recent messages the model is given as
+  its memory of the conversation had the same gap in both directions, where a tie
+  resolved inconsistently would drop one message and repeat another. Both now
+  order by insertion as well as time.
+- The local REST API opened its database with no busy timeout, so a checkpoint
+  overlapping a request failed it outright with a locked database instead of
+  waiting the moment out.
 
 ## [0.8.2] - 2026-08-01
 
