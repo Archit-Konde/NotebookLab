@@ -23,7 +23,7 @@ authors:
 repository-code: "https://github.com/Amey-Thakur/NotebookLab"
 url: "https://amey-thakur.github.io/NotebookLab/"
 license: MIT
-version: "0.7.7"
+version: "0.8.0"
 date-released: "2026-07-28"
 keywords:
   - ai

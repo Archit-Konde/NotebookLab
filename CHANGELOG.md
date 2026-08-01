@@ -4,6 +4,32 @@ All notable changes to NotebookLab will be documented in this file.
 
 ## [Unreleased]
 
+## [0.8.0] - 2026-08-01
+
+### Added
+
+- The Studio and the Audio Studio keep every result. Generating a quiz used to
+  throw away the study guide made a minute earlier, so reading it again meant
+  waiting for the model a second time. Each format now holds its own output, and
+  a small mark on the format buttons shows which ones a notebook already has.
+
+### Fixed
+
+- Models wrapped their answers in XML tags of their own invention, so a set of
+  key points arrived with `<extraction_results>` printed above and below it. Every
+  prompt here delivers source text inside tags, which keeps it as data rather
+  than instructions, and models mirror that style back. The wrapper is stripped
+  from every generation, and the prompts now say not to add one.
+
+### Changed
+
+- Upgraded to Tailwind CSS 4, TypeScript 6, and ESLint 10, with every other
+  dependency on its latest release and 57 Rust crates refreshed. `baseUrl` was
+  removed from the TypeScript config, having been removed from TypeScript itself.
+- TypeScript 7 is deliberately not used: the lint toolchain supports up to 6.1,
+  and moving past it would mean shipping with linting broken.
+
+
 ## [0.7.7] - 2026-07-30
 
 ### Changed

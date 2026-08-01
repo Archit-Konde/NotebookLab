@@ -3,7 +3,7 @@
   "@type": "SoftwareSourceCode",
   "name": "NotebookLab",
   "description": "Your thinking partner, on your machine. An offline-first AI knowledge workspace: import documents, chat with cited answers, write connected notes, and search everything, all locally.",
-  "version": "0.7.7",
+  "version": "0.8.0",
   "dateCreated": "2026-04-05",
   "dateModified": "2026-07-28",
   "license": "https://spdx.org/licenses/MIT",
