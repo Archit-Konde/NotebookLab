@@ -134,10 +134,14 @@ export function PodcastPage() {
     "notebooklab-state-audio-format",
     "discussion",
   );
-  const [script, setScript] = useRetainedState<PodcastScript | null>(
-    "notebooklab-state-audio-script",
-    null,
+  /* One script per format, not one overall. Generating a debate used to throw
+     away the discussion generated a minute earlier, so hearing both meant
+     waiting for the model twice. */
+  const [scripts, setScripts] = useRetainedState<Partial<Record<AudioFormat, PodcastScript>>>(
+    "notebooklab-state-audio-scripts",
+    {},
   );
+  const script = scripts[format] ?? null;
   /* Playing and which turn is speaking are one fact, not two. Kept together so
      starting, stopping and adopting a new script is a single state write rather
      than a pair that can be seen half-applied mid-render. */
@@ -191,8 +195,14 @@ export function PodcastPage() {
   useEffect(() => {
     if (!run.result) return;
     const parsed = safeParseScript(run.result);
-    if (parsed) setScript(parsed);
-  }, [run.result, setScript]);
+    if (!parsed) return;
+    /* Storing an identical value would build a new object, change the
+       dependency, and re-run this forever. */
+    if (scripts[format]?.title === parsed.title && scripts[format]?.turns.length === parsed.turns.length) {
+      return;
+    }
+    setScripts({ ...scripts, [format]: parsed });
+  }, [run.result, format, scripts, setScripts]);
 
   /* A new script stops playback. Without this the previous utterance chain
      keeps reading while the highlights track the new turns, and the new script
@@ -339,6 +349,14 @@ export function PodcastPage() {
               }`}
             >
               {f.label}
+              {/* A quiet mark on the formats already generated, so what the
+                  notebook holds is visible without clicking through each. */}
+              {scripts[f.id] && (
+                <span
+                  aria-label="already generated"
+                  className="inline-block ml-2 w-1.5 h-1.5 rounded-full bg-accent align-middle"
+                />
+              )}
             </button>
           ))}
         </div>

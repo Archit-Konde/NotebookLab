@@ -69,9 +69,16 @@ export function StudioPage() {
   );
   /* Preserve the typed focus across navigation and reload. */
   const [focus, setFocus] = usePersistentDraft("notebooklab-draft-studio-focus");
-  const [result, setResult] = useRetainedState<{ format: StudioFormat; text: string } | null>(
-    "notebooklab-state-studio-result",
-    null,
+  /* One result per format, not one overall.
+
+     A single slot meant generating a study guide and then a quiz threw the study
+     guide away: coming back to it showed an empty page, and the only way to read
+     it again was to generate it a second time and wait again. Keeping them by
+     format lets a notebook accumulate its flashcards, its mind map and its
+     timeline side by side, which is how the feature is actually used. */
+  const [results, setResults] = useRetainedState<Partial<Record<StudioFormat, string>>>(
+    "notebooklab-state-studio-results",
+    {},
   );
 
   const [sources, setSources] = useRetainedState<string[]>("notebooklab-studio-sources", []);
@@ -89,8 +96,12 @@ export function StudioPage() {
   );
 
   useEffect(() => {
-    if (run.result && runningFormat) setResult({ format: runningFormat, text: run.result });
-  }, [run.result, runningFormat, setResult]);
+    if (!run.result || !runningFormat) return;
+    /* Storing an identical value would build a new object, change the
+       dependency, and re-run this forever. */
+    if (results[runningFormat] === run.result) return;
+    setResults({ ...results, [runningFormat]: run.result });
+  }, [run.result, runningFormat, results, setResults]);
 
   const generate = () => {
     setRunningFormat(format);
@@ -104,6 +115,8 @@ export function StudioPage() {
 
   const pickFormat = (id: StudioFormat) => {
     setFormat(id);
+    /* Nothing is cleared: switching format now reveals what that format last
+       produced rather than discarding it. */
     /* The job is left attached on purpose. Switching format while something is
        generating used to detach from it, so the result landed nowhere and the
        wait was wasted; now it still arrives and is filed under the format that
@@ -123,7 +136,8 @@ export function StudioPage() {
   }
 
   const active = FORMATS.find((f) => f.id === format)!;
-  const showResult = result && result.format === format;
+  const currentResult = results[format];
+
 
   return (
     <div className="p-8 max-w-4xl mx-auto">
@@ -150,6 +164,15 @@ export function StudioPage() {
             }`}
           >
             {f.label}
+            {/* A quiet mark on the formats that already hold a result, so the
+                notebook's accumulated work is visible without clicking each
+                one to find out. */}
+            {results[f.id] && (
+              <span
+                aria-label="already generated"
+                className="inline-block ml-2 w-1.5 h-1.5 rounded-full bg-accent align-middle"
+              />
+            )}
           </button>
         ))}
       </div>
@@ -197,7 +220,7 @@ export function StudioPage() {
             {run.error}
           </p>
         )}
-        {showResult && !run.isRunning && (
+        {currentResult && !run.isRunning && (
           <>
             <div className="flex justify-end mb-3">
               <DownloadButton
@@ -205,7 +228,7 @@ export function StudioPage() {
                 what={`the ${active.label.toLowerCase()}`}
                 onDownload={() =>
                   downloadText(
-                    result.text,
+                    currentResult,
                     toFileName(
                       `notebooklab-${active.label}`,
                       MARKDOWN_FORMATS.has(format) ? "md" : "json",
@@ -215,10 +238,10 @@ export function StudioPage() {
                 }
               />
             </div>
-            <StudioResult format={format} text={result.text} />
+            <StudioResult format={format} text={currentResult} />
           </>
         )}
-        {!showResult && !run.isRunning && !run.error && run.ready && (
+        {!currentResult && !run.isRunning && !run.error && run.ready && (
           <p className="text-sm text-text-4">
             Choose a format above and generate it from this notebook.
           </p>
