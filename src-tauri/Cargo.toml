@@ -10,7 +10,7 @@
 
 [package]
 name = "notebooklab"
-version = "0.8.2"
+version = "0.8.3"
 description = "Your thinking partner, on your machine."
 authors = ["Amey Thakur", "Archit Konde"]
 license = "MIT"

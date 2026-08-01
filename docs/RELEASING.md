@@ -5,19 +5,21 @@ commands; the workflow does the rest.
 
 ## Steps
 
-1. **Bump the version** in all three manifests. They must match, or the
+1. **Bump the version** in all four places. They must match the tag, or the
    release workflow fails on purpose:
 
    - `package.json` (`version`)
-   - `src-tauri/Cargo.toml` (`version`, and refresh `Cargo.lock`)
+   - `src-tauri/Cargo.toml` (`version`)
    - `src-tauri/tauri.conf.json` (`version`)
+   - `src-tauri/Cargo.lock` (the `notebooklab` package entry)
 
-2. **Update `CHANGELOG.md`** with a new section for the version, dated, and
-   bump the version badge near the top of `README.md`. The badge is static
-   on purpose: dynamic badges show "repo not found" while the repository is
-   private. Once the repository is public you can switch it to
-   `img.shields.io/github/v/release/Amey-Thakur/NotebookLab` and stop
-   maintaining it by hand.
+   The lock file is checked because it was the one nobody remembered: it sat at
+   0.7.7 through three releases without anything noticing.
+
+2. **Update `CHANGELOG.md`** with a new section for the version, dated. The
+   release badge in `README.md` reads the latest release from GitHub and needs
+   no editing; it was maintained by hand only while the repository was private
+   and a dynamic badge would have shown "repo not found".
 
 3. **Commit, tag, and push**:
 

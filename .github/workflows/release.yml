@@ -43,11 +43,17 @@ jobs:
           PKG_VERSION=$(jq -r .version package.json)
           CONF_VERSION=$(jq -r .version src-tauri/tauri.conf.json)
           CARGO_VERSION=$(grep -m1 '^version' src-tauri/Cargo.toml | cut -d'"' -f2)
+          # The lock file records the app's own version too, and nothing checked
+          # it: it sat at 0.7.7 through three releases. That was harmless only
+          # because no build passes --locked, which is not a guarantee worth
+          # resting on.
+          LOCK_VERSION=$(grep -A1 '^name = "notebooklab"$' src-tauri/Cargo.lock | grep '^version' | cut -d'"' -f2)
 
-          echo "tag=$TAG_VERSION package.json=$PKG_VERSION tauri.conf.json=$CONF_VERSION Cargo.toml=$CARGO_VERSION"
+          echo "tag=$TAG_VERSION package.json=$PKG_VERSION tauri.conf.json=$CONF_VERSION Cargo.toml=$CARGO_VERSION Cargo.lock=$LOCK_VERSION"
 
           if [ "$TAG_VERSION" != "$PKG_VERSION" ] || \
              [ "$TAG_VERSION" != "$CONF_VERSION" ] || \
+             [ "$TAG_VERSION" != "$LOCK_VERSION" ] || \
              [ "$TAG_VERSION" != "$CARGO_VERSION" ]; then
             echo "::error::Tag $GITHUB_REF_NAME does not match the committed versions. Bump them first (see docs/RELEASING.md)."
             exit 1

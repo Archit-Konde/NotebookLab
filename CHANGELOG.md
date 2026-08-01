@@ -4,6 +4,8 @@ All notable changes to NotebookLab will be documented in this file.
 
 ## [Unreleased]
 
+## [0.8.3] - 2026-08-01
+
 ### Fixed
 
 - The sample notebook sent new users to features by the wrong name. The welcome
@@ -21,6 +23,11 @@ All notable changes to NotebookLab will be documented in this file.
   its memory of the conversation had the same gap in both directions, where a tie
   resolved inconsistently would drop one message and repeat another. Both now
   order by insertion as well as time.
+- The release guard checked three manifests for the version but not the lock
+  file, which had sat at 0.7.7 through three releases. Nothing built with
+  --locked, which is the only reason it did no harm. The lock file is now part
+  of the check, and the release notes no longer ask for a README badge that
+  updates itself.
 - The local REST API opened its database with no busy timeout, so a checkpoint
   overlapping a request failed it outright with a locked database instead of
   waiting the moment out.
