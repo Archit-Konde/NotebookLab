@@ -82,10 +82,6 @@ export function HomePage() {
     queryKey: [QUERY_KEYS.DOCUMENTS, "recent"],
     queryFn: () => tauriInvoke<RecentDocument[]>("list_recent_documents", { limit: 6 }),
   });
-  const { data: chunkCount } = useQuery({
-    queryKey: [QUERY_KEYS.CHUNK_COUNT],
-    queryFn: () => tauriInvoke<number>("get_chunk_count"),
-  });
 
   const newNote = () => {
     if (!activeNotebookId) {
@@ -100,10 +96,14 @@ export function HomePage() {
       .catch(() => navigate(ROUTES.NOTEBOOKS));
   };
 
+  /* Each hint states something the label does not: where the note lands, which
+     files can be dropped, what an answer is built from, what is searched. The
+     first read "Start writing", which is only "New note" again, and the second
+     named three formats when the app also reads Word documents and images. */
   const actions = [
-    { label: "New note", hint: "Start writing", onClick: newNote, icon: <IconPencil /> },
-    { label: "Import a document", hint: "PDF, text, or Markdown", onClick: () => navigate(ROUTES.DOCUMENTS), icon: <IconImport /> },
-    { label: "Ask a question", hint: "Chat with your sources", onClick: () => navigate(ROUTES.CHAT), icon: <IconChat /> },
+    { label: "New note", hint: "In the open notebook", onClick: newNote, icon: <IconPencil /> },
+    { label: "Import a document", hint: "PDF, Word, text, Markdown, images", onClick: () => navigate(ROUTES.DOCUMENTS), icon: <IconImport /> },
+    { label: "Ask a question", hint: "Answered from your sources", onClick: () => navigate(ROUTES.CHAT), icon: <IconChat /> },
     { label: "Search everything", hint: "Notes and documents", onClick: () => navigate(ROUTES.SEARCH), icon: <IconSearch /> },
   ];
 
@@ -151,18 +151,17 @@ export function HomePage() {
 
   return (
     <div className="px-8 py-14 max-w-4xl mx-auto">
-      {/* Greeting */}
+      {/* Greeting.
+
+          The mark and the wordmark used to be repeated here as an eyebrow, an
+          inch below the header that already carries both permanently, and the
+          line about staying on your machine was repeated again by the empty
+          state directly beneath it. Neither told a returning user anything they
+          did not already know, so the greeting stands on its own. */}
       <header className="mb-14">
-        <div className="flex items-center gap-2.5 mb-4">
-          <BrandMark className="h-6 w-6" />
-          <span className="font-mono text-2xs uppercase tracking-[3px] text-text-4">NotebookLab</span>
-        </div>
         <h1 className="font-display text-4xl font-bold text-text-1 tracking-tight">
           {displayName ? `${greeting()}, ${displayName}` : greeting()}
         </h1>
-        <p className="mt-3 font-body text-lg text-text-2 leading-relaxed max-w-xl">
-          A private place to think. Everything here stays on your machine.
-        </p>
       </header>
 
       {/* Quick actions */}
@@ -282,14 +281,6 @@ export function HomePage() {
             ))}
           </div>
         </section>
-      )}
-
-      {/* Quiet footer stat */}
-      {(hasNotebooks || (chunkCount ?? 0) > 0) && (
-        <p className="mt-14 text-2xs font-mono text-text-4">
-          {notebooks?.length ?? 0} {notebooks?.length === 1 ? "notebook" : "notebooks"}
-          {(chunkCount ?? 0) > 0 && ` · ${chunkCount} passages indexed`}
-        </p>
       )}
     </div>
   );

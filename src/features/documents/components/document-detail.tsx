@@ -25,11 +25,11 @@ export function DocumentDetail({ documentId }: DocumentDetailProps) {
   const { data: chunks, isLoading } = useDocumentChunks(documentId);
 
   if (isLoading) {
-    return <p className="text-xs text-text-4 font-mono p-4">Loading chunks...</p>;
+    return <p className="text-xs text-text-4 font-mono p-4">Loading passages…</p>;
   }
 
   if (!chunks || chunks.length === 0) {
-    return <p className="text-sm text-text-4 p-4">No chunks found for this document.</p>;
+    return <p className="text-sm text-text-4 p-4">No passages extracted from this document yet.</p>;
   }
 
   const jump = (chunkId: string) => {

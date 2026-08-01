@@ -4,6 +4,23 @@ All notable changes to NotebookLab will be documented in this file.
 
 ## [Unreleased]
 
+### Changed
+
+- Home no longer repeats what is already on screen. It opened with the mark and
+  the word NotebookLab as an eyebrow, an inch below the header that carries both
+  permanently, and a line about everything staying on your machine that the
+  empty state repeated directly beneath it. The greeting now stands on its own.
+- The four quick actions say something their labels do not. "New note" was
+  captioned "Start writing", which is the label again, and importing named
+  three formats when the app also reads Word documents and images.
+- One word for one thing. The status bar counted "chunks" while Home counted
+  "passages" and the document view said both, for the same number from the same
+  place. It is a passage everywhere the user can see it, and chunk only in the
+  code and the database, where it is the accurate term.
+- Home no longer runs its own count of indexed passages. It duplicated the one
+  in the status bar, which is on screen at all times, and cost an extra call on
+  every visit to say the same number twice.
+
 ### Fixed
 
 - The tour ran off the bottom of the window. It positioned each card using a

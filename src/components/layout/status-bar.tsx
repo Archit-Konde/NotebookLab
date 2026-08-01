@@ -1,7 +1,7 @@
 /*
  * Name: status-bar.tsx
  * Purpose: Bottom status bar with a live activity indicator, running
- *   generations, session token usage, and the indexed chunk count.
+ *   generations, session token usage, and the indexed passage count.
  * Description: The left dot is a real activity signal: amber when no model is
  *   loaded, green when a provider is ready, and a pulsing accent (with a ping
  *   ring) whenever the app is actually working, i.e. any chat, import, or
@@ -147,7 +147,7 @@ export function StatusBar() {
         )}
         <UsageChip />
         <span className={`font-mono text-2xs ${chunks > 0 ? "text-text-3" : "text-text-4"}`}>
-          {chunks} chunks indexed
+          {chunks} {chunks === 1 ? "passage" : "passages"} indexed
         </span>
       </span>
     </footer>
