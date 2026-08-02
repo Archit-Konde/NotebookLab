@@ -1,7 +1,7 @@
 {
   "name": "notebooklab",
   "private": true,
-  "version": "0.8.8",
+  "version": "0.8.9",
   "type": "module",
   "description": "Your thinking partner, on your machine. Offline-first AI knowledge workspace.",
   "license": "MIT",

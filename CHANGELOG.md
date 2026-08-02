@@ -4,6 +4,8 @@ All notable changes to NotebookLab will be documented in this file.
 
 ## [Unreleased]
 
+## [0.8.9] - 2026-08-02
+
 ### Fixed
 
 - The first error a new user meets came in two wordings. With nothing connected
