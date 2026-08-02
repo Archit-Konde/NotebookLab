@@ -120,7 +120,6 @@ pub fn search_chunks_hybrid(
         b.score
             .partial_cmp(&a.score)
             .unwrap_or(std::cmp::Ordering::Equal)
-            .then_with(|| a.chunk_id.cmp(&b.chunk_id))
     });
     merged.truncate(limit);
     Ok(merged)
