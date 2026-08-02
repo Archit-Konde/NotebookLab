@@ -100,7 +100,7 @@ export function TransformsPage() {
   return (
     <div className="flex flex-col h-full">
       <div className="px-8 pt-6 pb-4">
-        <h1 className="text-2xl font-display font-bold text-text-1 mb-1">Content Transforms</h1>
+        <h1 className="text-2xl font-display font-bold text-text-1 mb-1">Transform</h1>
         <NotebookScope />
 
         <ModelRequiredNotice action="Transforms" />

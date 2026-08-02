@@ -300,7 +300,7 @@ const SECTIONS: Section[] = [
 export function HelpPage() {
   return (
     <div className="mx-auto max-w-3xl p-8">
-      <h1 className="mb-1 font-display text-2xl font-bold text-text-1">Guide</h1>
+      <h1 className="mb-1 font-display text-2xl font-bold text-text-1">Help</h1>
       <p className="mb-8 text-sm text-text-3">
         Everything NotebookLab can do, in one place. This guide is part of the app, so it works offline.
       </p>

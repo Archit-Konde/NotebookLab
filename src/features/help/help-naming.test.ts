@@ -117,6 +117,28 @@ describe("help page naming", () => {
     expect(entries.filter((label) => !labels.has(label))).toEqual([]);
   });
 
+  it("heads each page the way the sidebar item that opens it is labelled", () => {
+    /* Landing somewhere headed differently from the link that took you there
+       reads as having gone to the wrong place. Think opened "Thinking Partner",
+       Transform opened "Content Transforms", and Help opened "Guide". */
+    const pages: [string, string][] = [
+      ["src/features/content-transformations/pages/transforms-page.tsx", "Transform"],
+      ["src/features/help/pages/help-page.tsx", "Help"],
+      ["src/features/thinking-partner/pages/thinking-partner-page.tsx", "Think"],
+      ["src/features/studio/pages/studio-page.tsx", "Studio"],
+      ["src/features/podcasts/pages/podcast-page.tsx", "Audio Studio"],
+      ["src/features/graph/pages/graph-page.tsx", "Connections"],
+    ];
+    const labels = new Set(sidebarLabels());
+    const wrong: string[] = [];
+    for (const [file, expected] of pages) {
+      expect(labels.has(expected), `the sidebar no longer has "${expected}"`).toBe(true);
+      const heading = read(file).match(/<h1[^>]*>\s*([^<{][^<]*?)\s*<\/h1>/)?.[1];
+      if (heading !== expected) wrong.push(`${file} is headed "${heading}", expected "${expected}"`);
+    }
+    expect(wrong).toEqual([]);
+  });
+
   it("points at each of the app's tools somewhere", () => {
     /* A tool the Help page never mentions is one the user has to find alone. */
     for (const tool of ["Chat", "Think", "Studio", "Canvas", "Transform", "Audio Studio", "Prompt Studio", "Models", "Search"]) {

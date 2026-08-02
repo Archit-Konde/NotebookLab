@@ -4,6 +4,16 @@ All notable changes to NotebookLab will be documented in this file.
 
 ## [Unreleased]
 
+### Fixed
+
+- Three places named a destination differently from the sidebar item that opens
+  it: the command palette offered "Transforms" where the sidebar says
+  "Transform", the transforms page was headed "Content Transforms", and the
+  help page was headed "Guide" while the sidebar says "Help". Landing somewhere
+  headed differently from the link you followed reads as having gone to the
+  wrong place. Tests now compare every palette entry and the page headings
+  against the sidebar.
+
 ## [0.8.9] - 2026-08-02
 
 ### Fixed
