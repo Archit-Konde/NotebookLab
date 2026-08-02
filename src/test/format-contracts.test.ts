@@ -60,6 +60,28 @@ describe("format contracts", () => {
     expect(frontend).toEqual(backend);
   });
 
+  it("sends transform names in the exact spelling serde expects", () => {
+    /* TransformType crosses as a string and is turned back into an enum by
+       serde, so the spelling is decided by its rename_all attribute rather than
+       by anything either side can see. lowercase makes ExtractKeyPoints into
+       "extractkeypoints"; snake_case would make it "extract_key_points" and
+       every transform would fail to deserialize. */
+    const service = read("src-tauri/src/services/transform_service.rs");
+    const rename = service.match(/#\[serde\(rename_all = "([a-z_]+)"\)\]\s*pub enum TransformType/);
+    expect(rename?.[1], "TransformType lost its rename_all attribute").toBe("lowercase");
+
+    const body = service.slice(service.indexOf("pub enum TransformType"));
+    const variants = [...body.slice(0, body.indexOf("}")).matchAll(/^\s{4}([A-Z]\w+),/gm)].map((m) => m[1]);
+    expect(variants.length).toBeGreaterThan(2);
+    const expected = variants.map((v) => v.toLowerCase()).sort();
+
+    const page = read("src/features/content-transformations/pages/transforms-page.tsx");
+    const union = page.match(/type TransformType\s*=\s*([^;]+);/);
+    const sent = [...(union?.[1] ?? "").matchAll(/"([a-z_]+)"/g)].map((m) => m[1]).sort();
+
+    expect(sent).toEqual(expected);
+  });
+
   it("offers exactly the Audio Studio formats the backend can build", () => {
     const podcast = read("src-tauri/src/commands/podcast_commands.rs");
     const matchOn = podcast.includes("match style.as_str()")
