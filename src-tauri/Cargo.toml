@@ -40,7 +40,7 @@ serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 
 # Database
-rusqlite = { version = "0.32", features = ["bundled"] }
+rusqlite = { version = "0.40", features = ["bundled"] }
 
 # Error handling
 thiserror = "2"
@@ -53,6 +53,12 @@ tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 uuid = { version = "1", features = ["v4", "v7"] }
 
 # HTTP client for model downloads and provider API calls
+# Deliberately held at 0.12. Version 0.13 replaces the default TLS backend with
+# rustls plus aws-lc-rs, which brings a C toolchain and cmake into the build and,
+# more importantly, moves certificate verification off the operating system trust
+# store. A machine behind a corporate proxy with its own certificate authority
+# would stop reaching cloud providers, and nothing in CI or the test suite can
+# catch that. Worth doing as a considered migration, not a version bump.
 reqwest = { version = "0.12", features = ["json", "blocking"] }
 
 # URL parsing for provider endpoint validation (SSRF guard)
@@ -70,7 +76,7 @@ sysinfo = { version = "0.39", default-features = false, features = ["system"] }
 
 
 # PDF text extraction
-pdf-extract = "0.10"
+pdf-extract = "0.12"
 
 # Local REST API server for automation
 tiny_http = "0.12"
