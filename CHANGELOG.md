@@ -6,6 +6,11 @@ All notable changes to NotebookLab will be documented in this file.
 
 ### Changed
 
+- The fields TypeScript reads off a command result are now checked against the
+  ones Rust sends. Rename a field in Rust and the TypeScript still compiles and
+  lints, then reads undefined at runtime, which shows as a blank label or a
+  progress bar stuck at NaN rather than as an error. All twenty-nine shared
+  shapes agree today.
 - The argument names every command is called with are now checked against the
   ones it declares. They cross as a JSON object and are matched by serde on
   name, with nothing on either side checked by a compiler, so renaming a Rust
