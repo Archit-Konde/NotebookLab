@@ -23,6 +23,7 @@ use std::path::Path;
 
 use quick_xml::events::{BytesStart, Event};
 use quick_xml::reader::Reader;
+use quick_xml::XmlVersion;
 
 use crate::error::{AppError, AppResult};
 
@@ -157,8 +158,14 @@ fn extract_document(xml: &str) -> AppResult<Extracted> {
             },
             Event::Text(t) if in_text && drawing_depth == 0 => {
                 /* xml_content decodes the bytes and resolves XML entity
-                references (e.g. &amp;) to their characters. */
-                let text = t.xml_content().map_err(|e| {
+                references (e.g. &amp;) to their characters.
+
+                The version has to be stated since quick-xml 0.41, because 1.1
+                allows character references 1.0 forbids. Word writes
+                `<?xml version="1.0"?>`, and this parser never reads the
+                declaration, so assuming 1.0 both matches the format and keeps
+                the behaviour the implicit version gave before. */
+                let text = t.xml_content(XmlVersion::Implicit1_0).map_err(|e| {
                     AppError::Internal(format!("Could not read document text: {e}"))
                 })?;
                 paragraph.push_str(&text);
@@ -192,7 +199,13 @@ fn attribute_val(element: &BytesStart) -> Option<String> {
         .attributes()
         .flatten()
         .find(|a| local_name(a.key.as_ref()) == b"val")
-        .and_then(|a| a.unescape_value().ok().map(|v| v.into_owned()))
+        /* normalized_value replaces unescape_value, which quick-xml 0.41
+        deprecated. Same 1.0 assumption as the text content above. */
+        .and_then(|a| {
+            a.normalized_value(XmlVersion::Implicit1_0)
+                .ok()
+                .map(|v| v.into_owned())
+        })
 }
 
 /// Word's built-in heading paragraphs use the style ids "Heading1".."Heading9".
