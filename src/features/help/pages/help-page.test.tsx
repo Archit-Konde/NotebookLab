@@ -19,8 +19,10 @@ import { HelpPage } from "./help-page";
 describe("HelpPage", () => {
   it("renders the guide with the current features", () => {
     const markup = renderToStaticMarkup(<HelpPage />);
-    expect(markup).toContain("Guide");
-    for (const topic of ["The Studio", "Canvas", "Audio Studio", "Sharing a notebook", "OCR"]) {
+    /* The heading matches the sidebar item that opens this page; see
+       help-naming.test.ts, which checks that rule across the app. */
+    expect(markup).toContain("Help");
+    for (const topic of ["Studio", "Canvas", "Audio Studio", "Sharing a notebook", "OCR"]) {
       expect(markup).toContain(topic);
     }
     /* The on-this-page list links to every section anchor. */
