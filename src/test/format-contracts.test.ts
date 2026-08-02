@@ -159,6 +159,34 @@ describe("format contracts", () => {
     expect(listened.filter((e) => !emitted.includes(e))).toEqual([]);
   });
 
+  it("only reads theme colours the stylesheet actually defines", () => {
+    /* The canvas, the notes graph and the idea space are drawn on a 2D context,
+       so they read their colours from CSS custom properties at runtime. Every
+       read has a fallback, which means a name no stylesheet defines does not
+       fail: the drawing quietly uses a hardcoded colour and stops following the
+       theme. That has happened here once already, to a colour meant for
+       evidence in the idea space, which fell back to a green that ignored light
+       mode entirely. */
+    const css = read("src/styles/globals.css");
+    const defined = new Set([...css.matchAll(/(--[a-z0-9-]+)\s*:/g)].map((m) => m[1]));
+    expect(defined.size).toBeGreaterThan(10);
+
+    const drawings = [
+      "src/features/thinking-partner/components/idea-space-view.tsx",
+      "src/features/graph/components/graph-3d.tsx",
+      "src/features/canvas/pages/canvas-page.tsx",
+    ];
+    const missing: string[] = [];
+    for (const file of drawings) {
+      const names = [...read(file).matchAll(/"(--color-[a-z0-9-]+)"/g)].map((m) => m[1]);
+      expect(names.length, `${file} reads no theme colours; has it changed shape?`).toBeGreaterThan(0);
+      for (const name of new Set(names)) {
+        if (!defined.has(name)) missing.push(`${file} reads ${name}, which no stylesheet defines`);
+      }
+    }
+    expect(missing).toEqual([]);
+  });
+
   it("offers exactly the Studio formats the backend can build", () => {
     const backend = backendFormats("src-tauri/src/commands/studio_commands.rs", "match format.as_str()");
     const frontend = frontendFormats("src/features/studio/pages/studio-page.tsx");

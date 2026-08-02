@@ -4,6 +4,17 @@ All notable changes to NotebookLab will be documented in this file.
 
 ## [Unreleased]
 
+### Changed
+
+- Four agreements that no compiler checks are now checked by tests: the event
+  names the backend emits against the ones the frontend listens for, the theme
+  colours the canvas, the notes graph and the idea space read at runtime against
+  the ones the stylesheet defines, every command-palette entry against the
+  sidebar, and the page headings against the sidebar item that opens them. Each
+  of these fails silently when it drifts, which is what makes them worth
+  pinning: a renamed event is a progress bar that never moves, and an undefined
+  colour is a drawing that quietly stops following the theme.
+
 ### Fixed
 
 - Three places named a destination differently from the sidebar item that opens
