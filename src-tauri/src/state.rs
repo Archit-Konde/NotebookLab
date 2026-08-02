@@ -123,7 +123,55 @@ impl AppState {
         let db_path = data_dir.join("notebooklab.db");
         tracing::info!("Database path: {}", db_path.display());
 
-        let conn = Connection::open(&db_path)?;
+        let conn = Self::open_or_recover(&db_path)?;
+
+        let provider_router = ProviderRouter::new();
+
+        Ok(Self {
+            db: Mutex::new(conn),
+            providers: RwLock::new(provider_router),
+            api_token: format!("nbl-api-{}", uuid::Uuid::new_v4().simple()),
+            ocr: Mutex::new(None),
+            jobs: crate::services::job_service::JobRegistry::new(),
+        })
+    }
+
+    /// Open the database, and if the file turns out to be unreadable, set it
+    /// aside and start a fresh one.
+    ///
+    /// Everything here used to run inline, and every failure aborted `setup`,
+    /// which means the window never appears. A database damaged by a power cut
+    /// or a half-written file therefore left the app unable to start at all,
+    /// showing a line like "database disk image is malformed" and offering
+    /// nothing to do about it. The app opening with an empty library is a bad
+    /// day; the app never opening again is a worse one.
+    ///
+    /// The damaged file is renamed, never deleted, so nothing is destroyed and
+    /// a copy remains for anyone who wants to try to recover it. Only genuine
+    /// corruption triggers this: a locked or unreadable file is a different
+    /// problem, and quietly starting fresh there would hide it.
+    fn open_or_recover(
+        db_path: &std::path::Path,
+    ) -> Result<Connection, Box<dyn std::error::Error>> {
+        match Self::open_database(db_path) {
+            Ok(conn) => Ok(conn),
+            Err(error) if Self::is_corruption(&error) => {
+                let preserved = Self::set_corrupt_database_aside(db_path)?;
+                tracing::error!(
+                    "The database at {} could not be read ({error}). It has been kept at {} and                      a new, empty one created in its place.",
+                    db_path.display(),
+                    preserved.display()
+                );
+                Ok(Self::open_database(db_path)?)
+            }
+            Err(error) => Err(Box::new(error)),
+        }
+    }
+
+    /// Open a connection, apply the connection pragmas, and bring the schema up
+    /// to date.
+    fn open_database(db_path: &std::path::Path) -> Result<Connection, rusqlite::Error> {
+        let conn = Connection::open(db_path)?;
 
         conn.execute_batch(
             "PRAGMA journal_mode = WAL;
@@ -137,19 +185,44 @@ impl AppState {
         }
 
         Self::run_migrations(&conn)?;
-
-        let provider_router = ProviderRouter::new();
-
-        Ok(Self {
-            db: Mutex::new(conn),
-            providers: RwLock::new(provider_router),
-            api_token: format!("nbl-api-{}", uuid::Uuid::new_v4().simple()),
-            ocr: Mutex::new(None),
-            jobs: crate::services::job_service::JobRegistry::new(),
-        })
+        Ok(conn)
     }
 
-    fn run_migrations(conn: &Connection) -> Result<(), Box<dyn std::error::Error>> {
+    /// Whether the error says the file is not a usable database, as opposed to
+    /// being locked, missing, or unreadable for a reason worth reporting.
+    fn is_corruption(error: &rusqlite::Error) -> bool {
+        matches!(
+            error,
+            rusqlite::Error::SqliteFailure(inner, _)
+                if matches!(
+                    inner.code,
+                    rusqlite::ErrorCode::DatabaseCorrupt | rusqlite::ErrorCode::NotADatabase
+                )
+        )
+    }
+
+    /// Rename the damaged database out of the way, with its write-ahead log and
+    /// shared-memory files, and return where it went. Those two companions have
+    /// to move with it: left behind, SQLite would try to replay them into the
+    /// new database and damage that one too.
+    fn set_corrupt_database_aside(
+        db_path: &std::path::Path,
+    ) -> Result<PathBuf, Box<dyn std::error::Error>> {
+        let stamp = chrono::Utc::now().format("%Y%m%d-%H%M%S");
+        let preserved = db_path.with_file_name(format!("notebooklab-unreadable-{stamp}.db"));
+        std::fs::rename(db_path, &preserved)?;
+
+        for suffix in ["-wal", "-shm"] {
+            let companion = PathBuf::from(format!("{}{suffix}", db_path.display()));
+            if companion.exists() {
+                let moved = PathBuf::from(format!("{}{suffix}", preserved.display()));
+                let _ = std::fs::rename(&companion, &moved);
+            }
+        }
+        Ok(preserved)
+    }
+
+    fn run_migrations(conn: &Connection) -> Result<(), rusqlite::Error> {
         let migrations = [
             include_str!("../resources/migrations/001_initial_schema.sql"),
             include_str!("../resources/migrations/002_chat_tables.sql"),
@@ -224,6 +297,110 @@ mod tests {
             .collect::<Result<Vec<i64>, _>>()
             .expect("collect");
         rows
+    }
+
+    /// A directory of its own per test, since these write real files.
+    fn scratch(name: &str) -> std::path::PathBuf {
+        let dir = std::env::temp_dir().join(format!("notebooklab-state-{name}"));
+        std::fs::remove_dir_all(&dir).ok();
+        std::fs::create_dir_all(&dir).unwrap();
+        dir
+    }
+
+    #[test]
+    fn a_healthy_database_opens_and_is_left_where_it_is() {
+        let dir = scratch("healthy");
+        let db = dir.join("notebooklab.db");
+
+        let conn = super::AppState::open_or_recover(&db).expect("first open");
+        conn.execute("INSERT INTO notebooks (id, name) VALUES ('nb', 'Kept')", [])
+            .unwrap();
+        drop(conn);
+
+        let conn = super::AppState::open_or_recover(&db).expect("second open");
+        let name: String = conn
+            .query_row("SELECT name FROM notebooks WHERE id = 'nb'", [], |r| {
+                r.get(0)
+            })
+            .expect("the notebook should still be there");
+        assert_eq!(name, "Kept", "a healthy database must not be replaced");
+
+        let set_aside: Vec<_> = std::fs::read_dir(&dir)
+            .unwrap()
+            .filter_map(|e| e.ok())
+            .filter(|e| e.file_name().to_string_lossy().contains("unreadable"))
+            .collect();
+        assert!(set_aside.is_empty(), "nothing should have been set aside");
+        std::fs::remove_dir_all(&dir).ok();
+    }
+
+    #[test]
+    fn an_unreadable_database_is_set_aside_and_the_app_still_starts() {
+        /* Without this the whole of setup fails and the window never appears,
+        so a file damaged by a power cut left the app unable to open at all. */
+        let dir = scratch("corrupt");
+        let db = dir.join("notebooklab.db");
+        std::fs::write(&db, b"this is not a database, not even slightly").unwrap();
+        /* A leftover write-ahead log has to travel with it; left behind, SQLite
+        would replay it into the replacement. */
+        std::fs::write(dir.join("notebooklab.db-wal"), b"stale log").unwrap();
+
+        let conn = super::AppState::open_or_recover(&db).expect("the app must still start");
+
+        let version: i64 = conn
+            .query_row("PRAGMA user_version", [], |r| r.get(0))
+            .unwrap();
+        assert_eq!(version, 7, "the replacement should be fully migrated");
+
+        let names: Vec<String> = std::fs::read_dir(&dir)
+            .unwrap()
+            .filter_map(|e| e.ok())
+            .map(|e| e.file_name().to_string_lossy().to_string())
+            .collect();
+        assert!(
+            names
+                .iter()
+                .any(|n| n.contains("unreadable") && n.ends_with(".db")),
+            "the damaged file must be kept, not deleted: {names:?}"
+        );
+        assert!(
+            names
+                .iter()
+                .any(|n| n.contains("unreadable") && n.ends_with(".db-wal")),
+            "its write-ahead log must move with it: {names:?}"
+        );
+        assert!(
+            !names.iter().any(|n| n == "notebooklab.db-wal"),
+            "no stale log may be left beside the new database: {names:?}"
+        );
+        std::fs::remove_dir_all(&dir).ok();
+    }
+
+    #[test]
+    fn only_a_broken_file_counts_as_corruption() {
+        /* Starting fresh on any error would hide a locked or unreadable file
+        behind an empty library, which looks like silent data loss. */
+        let dir = scratch("classify");
+        let db = dir.join("notebooklab.db");
+        std::fs::write(&db, b"not a database").unwrap();
+
+        let error = super::AppState::open_database(&db).expect_err("should refuse to open");
+        assert!(
+            super::AppState::is_corruption(&error),
+            "a file that is not a database must be recognised as such: {error}"
+        );
+
+        /* A plain failure to open, such as a path that is a directory, is not
+        corruption and must be reported rather than swept aside. */
+        let as_dir = dir.join("a-directory.db");
+        std::fs::create_dir_all(&as_dir).unwrap();
+        if let Err(other) = super::AppState::open_database(&as_dir) {
+            assert!(
+                !super::AppState::is_corruption(&other),
+                "an unopenable path is not corruption: {other}"
+            );
+        }
+        std::fs::remove_dir_all(&dir).ok();
     }
 
     #[test]

@@ -4,6 +4,19 @@ All notable changes to NotebookLab will be documented in this file.
 
 ## [Unreleased]
 
+### Fixed
+
+- A damaged database stopped the app opening at all. Every failure while setting
+  up the database aborted startup, so a file left half-written by a power cut or
+  a killed process meant the window never appeared again, showing a line like
+  "database disk image is malformed" with nothing to do about it. An unreadable
+  file is now renamed out of the way, never deleted, and a fresh one takes its
+  place, so the app always starts and the old file stays for anyone who wants to
+  recover it. Its write-ahead log moves with it, since a log left behind would be
+  replayed into the replacement. Only genuine corruption triggers this: a locked
+  or unreadable file is a different problem and is still reported rather than
+  hidden behind an empty library.
+
 ## [0.8.8] - 2026-08-02
 
 ### Changed
