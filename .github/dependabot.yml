@@ -19,9 +19,16 @@ updates:
         patterns:
           - "*"
     ignore:
-      # Block major version bumps that require migration work
+      # Block major version bumps that require migration work.
       - dependency-name: "tailwindcss"
         update-types: ["version-update:semver-major"]
+      # TypeScript 7 is not a judgement call, it is refused outright. Installing
+      # it and running the linter (tried on 2026-08-02) gives:
+      #     Error: typescript-eslint does not support TS 7.0.
+      # typescript-eslint 8.65.0 is the newest release there is and still
+      # declares typescript ">=4.8.4 <6.1.0". Taking 7 today means shipping with
+      # no lint coverage at all, so this stays until typescript-eslint supports
+      # it. Re-check by installing typescript@7 and running npm run lint.
       - dependency-name: "typescript"
         update-types: ["version-update:semver-major"]
       - dependency-name: "@eslint/*"
