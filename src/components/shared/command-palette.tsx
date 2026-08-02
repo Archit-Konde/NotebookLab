@@ -43,7 +43,7 @@ const PAGES: Array<{ label: string; route: string }> = [
   { label: "Documents", route: ROUTES.DOCUMENTS },
   { label: "Search", route: ROUTES.SEARCH },
   { label: "Chat", route: ROUTES.CHAT },
-  { label: "Thinking Partner", route: ROUTES.THINKING_PARTNER },
+  { label: "Think", route: ROUTES.THINKING_PARTNER },
   { label: "Studio", route: ROUTES.STUDIO },
   { label: "Canvas", route: ROUTES.CANVAS },
   { label: "Transforms", route: ROUTES.TRANSFORMS },

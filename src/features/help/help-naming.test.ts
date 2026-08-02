@@ -14,13 +14,33 @@
  * Date: 2026-08-02
  */
 
-import { readFileSync } from "node:fs";
+import { readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 
 import { describe, expect, it } from "vitest";
 
 const root = join(__dirname, "..", "..", "..");
 const read = (p: string) => readFileSync(join(root, p), "utf-8");
+
+
+/** Remove block and line comments so a comment about a name is not a use of it. */
+function stripComments(code: string): string {
+  return code.replace(/\/\*[\s\S]*?\*\//g, "").replace(/^\s*\/\/.*$/gm, "");
+}
+
+/** Every source file whose text can reach the screen, this test excepted. */
+function userFacingFiles(): string[] {
+  const out: string[] = [];
+  const walk = (dir: string) => {
+    for (const entry of readdirSync(join(root, dir), { withFileTypes: true })) {
+      const rel = `${dir}/${entry.name}`;
+      if (entry.isDirectory()) walk(rel);
+      else if (/\.tsx?$/.test(entry.name) && !entry.name.includes(".test.")) out.push(rel);
+    }
+  };
+  walk("src");
+  return out;
+}
 
 const sidebar = read("src/components/layout/app-sidebar.tsx");
 const help = read("src/features/help/pages/help-page.tsx");
@@ -48,14 +68,25 @@ describe("help page naming", () => {
   });
 
   it("never calls a feature by a name the sidebar does not use", () => {
-    /* Names this app has used before and no longer does. A reader sent to any of
-       them looks for a menu item that is not there. */
-    const retired = ["Thinking Partner", "Booklet", "Field Guide", "Podcasts page"];
-    const labels = sidebarLabels();
-    for (const name of retired) {
-      if (labels.includes(name)) continue;
-      expect(help, `Help still calls something "${name}"`).not.toContain(name);
+    /* Checking only the Help page was too narrow: it passed while the page you
+       land on was headed "Thinking Partner" and the command palette offered the
+       same name, so the sidebar said Think and everything it led to said
+       something else. Every user-facing file is read now.
+
+       Comments are stripped first. A file header explaining why a name was
+       retired is not the same as showing it to someone. */
+    const retired = ["Thinking Partner", "Booklet", "Field Guide"];
+    const labels = new Set(sidebarLabels());
+    const offenders: string[] = [];
+
+    for (const file of userFacingFiles()) {
+      const code = stripComments(read(file));
+      for (const name of retired) {
+        if (labels.has(name)) continue;
+        if (code.includes(name)) offenders.push(`${file} still shows "${name}"`);
+      }
     }
+    expect(offenders).toEqual([]);
   });
 
   it("titles a section after a sidebar destination exactly, when it names one", () => {

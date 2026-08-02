@@ -6,6 +6,12 @@ All notable changes to NotebookLab will be documented in this file.
 
 ### Fixed
 
+- The sidebar and everything it led to disagreed on a name. Clicking Think
+  opened a page headed "Thinking Partner", the Ctrl+K palette offered
+  "Thinking Partner", and the Help page described it under that name too, while
+  no label anywhere in the app said it. The heading, the palette entry and the
+  Help section all say Think now, and the fuller phrase survives where it
+  describes rather than labels.
 - The Help page named a feature that does not exist. It described the "Thinking
   Partner", which the sidebar calls Think, so the page a reader opens when they
   cannot find something sent them looking for a menu item that was not there,

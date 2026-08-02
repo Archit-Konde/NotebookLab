@@ -80,7 +80,7 @@ export function ThinkingPartnerPage() {
     return (
       <div className="flex flex-col items-center justify-center h-full text-text-3 p-8">
         <p className="text-lg mb-2">No notebook selected</p>
-        <p className="text-sm text-text-4 mb-4">Open a notebook first to use the Thinking Partner.</p>
+        <p className="text-sm text-text-4 mb-4">Open a notebook first to think with your sources.</p>
         <Link
           to={ROUTES.NOTEBOOKS}
           className="px-4 py-2 text-sm font-mono border border-border text-text-2 hover:border-accent-dim transition-colors"
@@ -94,7 +94,7 @@ export function ThinkingPartnerPage() {
   return (
     <div className="flex flex-col h-full">
       <div className="px-8 pt-6 pb-4">
-        <h1 className="text-2xl font-display font-bold text-text-1 mb-1">Thinking Partner</h1>
+        <h1 className="text-2xl font-display font-bold text-text-1 mb-1">Think</h1>
         <NotebookScope />
 
         <ModelRequiredNotice action="The thinking partner" />
