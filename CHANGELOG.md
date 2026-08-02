@@ -4,6 +4,8 @@ All notable changes to NotebookLab will be documented in this file.
 
 ## [Unreleased]
 
+## [0.8.11] - 2026-08-02
+
 ### Changed
 
 - The fields TypeScript reads off a command result are now checked against the
