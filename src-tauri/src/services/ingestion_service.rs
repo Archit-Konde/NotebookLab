@@ -87,17 +87,37 @@ pub fn prepare_ingest(
     /* Compute file hash for deduplication */
     let file_hash = compute_file_hash(file_path)?;
 
-    /* Check if this file was already imported */
+    /* Check if this file was already imported.
+
+    An import that failed leaves the document behind, marked Error, so that it
+    is visible rather than vanishing silently. Its hash stays in the table too,
+    and the check below used to match it: retrying the same file answered "this
+    file has already been imported", which claims a success that never happened
+    and left no way forward except finding the failed row and deleting it by
+    hand. A failed attempt is replaced instead, so retrying simply works.
+
+    Only Error is replaced. A document still Processing may belong to an import
+    running right now, and deleting it would pull the row out from under that
+    one; blocking is the safe answer there. */
     if let Some(existing) = document_repository::find_by_hash(conn, notebook_id, &file_hash)? {
-        tracing::info!(
-            "Document already imported: {} ({})",
-            existing.title,
-            existing.id
-        );
-        return Err(AppError::InvalidInput(format!(
-            "This file has already been imported as '{}'",
-            existing.title
-        )));
+        if existing.status == DocumentStatus::Error {
+            tracing::info!(
+                "Replacing a failed import of the same file: {} ({})",
+                existing.title,
+                existing.id
+            );
+            document_repository::delete(conn, &existing.id)?;
+        } else {
+            tracing::info!(
+                "Document already imported: {} ({})",
+                existing.title,
+                existing.id
+            );
+            return Err(AppError::InvalidInput(format!(
+                "This file has already been imported as '{}'",
+                existing.title
+            )));
+        }
     }
 
     /* Create the document record */
@@ -203,7 +223,119 @@ fn compute_file_hash(path: &Path) -> AppResult<String> {
 
 #[cfg(test)]
 mod tests {
+    use crate::database::models::DocumentStatus;
     use crate::services::chunking_service;
+
+    use rusqlite::Connection;
+
+    fn memory_db() -> Connection {
+        let conn = Connection::open_in_memory().unwrap();
+        conn.execute_batch("PRAGMA foreign_keys = ON;").unwrap();
+        conn.execute_batch(include_str!(
+            "../../resources/migrations/001_initial_schema.sql"
+        ))
+        .unwrap();
+        conn.execute(
+            "INSERT INTO notebooks (id, name) VALUES ('nb', 'Notebook')",
+            [],
+        )
+        .unwrap();
+        conn
+    }
+
+    /// A real file on disk, since prepare_ingest reads its size and hashes it.
+    fn temp_file(name: &str, body: &str) -> std::path::PathBuf {
+        let dir = std::env::temp_dir().join("notebooklab-ingest-tests");
+        std::fs::create_dir_all(&dir).unwrap();
+        let path = dir.join(name);
+        std::fs::write(&path, body).unwrap();
+        path
+    }
+
+    #[test]
+    fn a_file_already_imported_is_refused() {
+        let conn = memory_db();
+        let file = temp_file("already-there.txt", "some text");
+
+        let first = super::prepare_ingest(&conn, "nb", &file).unwrap();
+        crate::database::repository::document_repository::update_status(
+            &conn,
+            &first.doc_id,
+            DocumentStatus::Processed,
+        )
+        .unwrap();
+
+        let again = super::prepare_ingest(&conn, "nb", &file);
+        assert!(
+            again.is_err(),
+            "importing the same file twice must be refused"
+        );
+        std::fs::remove_file(&file).ok();
+    }
+
+    #[test]
+    fn an_import_that_failed_can_be_tried_again() {
+        /* The failed attempt stays in the table so the user can see it, and its
+        hash used to match here: the retry was told the file had already been
+        imported, which was both untrue and unactionable without deleting the
+        failed row by hand. */
+        let conn = memory_db();
+        let file = temp_file("failed-once.txt", "some text");
+
+        let failed = super::prepare_ingest(&conn, "nb", &file).unwrap();
+        super::mark_ingest_error(&conn, &failed.doc_id);
+
+        let retry = super::prepare_ingest(&conn, "nb", &file);
+        assert!(
+            retry.is_ok(),
+            "a failed import must be retryable: {:?}",
+            retry.err()
+        );
+
+        /* The failed row is replaced rather than accumulated. */
+        let docs = crate::database::repository::document_repository::list_by_notebook(&conn, "nb")
+            .unwrap();
+        assert_eq!(docs.len(), 1, "the failed attempt should not linger");
+        assert_ne!(docs[0].id, failed.doc_id, "the retry is a fresh document");
+        std::fs::remove_file(&file).ok();
+    }
+
+    #[test]
+    fn a_document_still_processing_is_not_replaced() {
+        /* It may belong to an import running right now, and deleting it would
+        pull the row out from under that one. */
+        let conn = memory_db();
+        let file = temp_file("in-flight.txt", "some text");
+
+        let running = super::prepare_ingest(&conn, "nb", &file).unwrap();
+        assert!(
+            super::prepare_ingest(&conn, "nb", &file).is_err(),
+            "an in-flight import must not be replaced"
+        );
+
+        let docs = crate::database::repository::document_repository::list_by_notebook(&conn, "nb")
+            .unwrap();
+        assert_eq!(docs.len(), 1);
+        assert_eq!(docs[0].id, running.doc_id);
+        std::fs::remove_file(&file).ok();
+    }
+
+    #[test]
+    fn the_same_file_in_another_notebook_is_allowed() {
+        /* Deduplication is per notebook: the same paper can be a source in two
+        different pieces of work. */
+        let conn = memory_db();
+        conn.execute(
+            "INSERT INTO notebooks (id, name) VALUES ('other', 'Other')",
+            [],
+        )
+        .unwrap();
+        let file = temp_file("shared.txt", "some text");
+
+        assert!(super::prepare_ingest(&conn, "nb", &file).is_ok());
+        assert!(super::prepare_ingest(&conn, "other", &file).is_ok());
+        std::fs::remove_file(&file).ok();
+    }
 
     /// Rebuild what `parse_and_chunk` does across pages, without needing a real
     /// file or a parser: chunk each page, concatenate, then renumber.
