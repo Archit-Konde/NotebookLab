@@ -21,7 +21,7 @@ import { useEffect, useState } from "react";
 import { useQuery, useIsMutating } from "@tanstack/react-query";
 import { listen } from "@tauri-apps/api/event";
 
-import { tauriInvoke } from "@/services/tauri-client";
+import { hasTauri, tauriInvoke } from "@/services/tauri-client";
 import { QUERY_KEYS } from "@/lib/constants";
 import { cn } from "@/lib/utils";
 import { countRunning, selectJobs, useJobStore } from "@/stores/job-store";
@@ -53,6 +53,7 @@ export function StatusBar() {
   /* The backend downloads updates in the background and announces when one
      is staged; restarting swaps it in. */
   useEffect(() => {
+    if (!hasTauri()) return;
     const unlisten = listen<string>("update-ready", (event) => {
       setUpdateVersion(event.payload);
     });
@@ -64,6 +65,7 @@ export function StatusBar() {
   /* Follow model-download progress so the indicator can show it from anywhere,
      not just the Models page. Clear it once the download settles. */
   useEffect(() => {
+    if (!hasTauri()) return;
     const unlisten = listen<DownloadProgress>("model-download-progress", (event) => {
       const { percent, status } = event.payload;
       setDownloadPercent(status === "downloading" && percent < 100 ? percent : null);

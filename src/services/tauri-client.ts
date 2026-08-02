@@ -16,6 +16,22 @@ import { invoke } from "@tauri-apps/api/core";
 
 
 /**
+ * Whether the app is running inside Tauri rather than a plain browser.
+ *
+ * Anything reaching for the event bridge or the webview has to ask first:
+ * `listen` and `getCurrentWebview` read globals Tauri injects, and without them
+ * they throw or reject rather than returning nothing. An unhandled rejection is
+ * the quiet outcome; `getCurrentWebview` took a whole page down.
+ *
+ * The packaged app always has them, so this only matters when the frontend is
+ * served in a browser, which is how the layout is checked during development.
+ */
+export function hasTauri(): boolean {
+  return typeof window !== "undefined" && "__TAURI_INTERNALS__" in window;
+}
+
+
+/**
  * Type-safe Tauri command invocation with standardized error handling.
  * Wraps @tauri-apps/api/core invoke() to catch Rust-side errors and
  * convert them into structured frontend errors.

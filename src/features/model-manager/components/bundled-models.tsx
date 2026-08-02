@@ -22,7 +22,7 @@ import { useEffect, useState } from "react";
 import { listen } from "@tauri-apps/api/event";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
-import { tauriInvoke } from "@/services/tauri-client";
+import { hasTauri, tauriInvoke } from "@/services/tauri-client";
 import { QUERY_KEYS } from "@/lib/constants";
 import { cn, formatBytes } from "@/lib/utils";
 import { formatError } from "@/lib/format-error";
@@ -62,6 +62,7 @@ export function BundledModels({ onDownloaded }: BundledModelsProps) {
 
   /* Follow download progress; refresh the local model list when one lands. */
   useEffect(() => {
+    if (!hasTauri()) return;
     const unlisten = listen<DownloadProgress>("model-download-progress", (event) => {
       const payload = event.payload;
       if (payload.status === "complete") {

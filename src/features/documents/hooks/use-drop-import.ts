@@ -34,6 +34,13 @@ export function useDropImport(notebookId: string | undefined) {
 
   useEffect(() => {
     if (!notebookId) return;
+    /* getCurrentWebview reads Tauri's injected globals and throws outright when
+       they are absent, which takes the whole page down rather than costing it
+       drag and drop. The packaged app always injects them, so this only bites
+       when the frontend is opened in a plain browser, which is how the layout
+       gets checked during development. The same guard is on the chat page's
+       event listener. */
+    if (typeof window === "undefined" || !("__TAURI_INTERNALS__" in window)) return;
 
     let unlisten: (() => void) | undefined;
     let cancelled = false;

@@ -4,6 +4,18 @@ All notable changes to NotebookLab will be documented in this file.
 
 ## [Unreleased]
 
+### Fixed
+
+- Opening the Documents page outside the packaged app took the whole window
+  down with "Something went wrong". Drag-and-drop asks Tauri for the current
+  webview, which throws rather than returning nothing when the globals it reads
+  are absent, and the error escaped the effect into the page. Everything that
+  reaches for the event bridge or the webview now checks first, through one
+  helper rather than four copies of the same condition, so a missing bridge
+  costs that one feature instead of the page. The packaged app always injects
+  those globals, so this was only reachable in a browser, which is where the
+  layout gets checked during development.
+
 ### Removed
 
 - Two commands that nothing called. get_job returned a single job by id, which

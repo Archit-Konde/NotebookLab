@@ -20,7 +20,7 @@ import { useEffect, useMemo, useState } from "react";
 import { listen } from "@tauri-apps/api/event";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 
-import { tauriInvoke } from "@/services/tauri-client";
+import { hasTauri, tauriInvoke } from "@/services/tauri-client";
 import { cn, formatBytes } from "@/lib/utils";
 import { formatError } from "@/lib/format-error";
 import { QUERY_KEYS } from "@/lib/constants";
@@ -71,6 +71,7 @@ export function ModelCatalogBrowser({ installedTags }: ModelCatalogBrowserProps)
 
   /* Follow the backend's pull events for the lifetime of the browser. */
   useEffect(() => {
+    if (!hasTauri()) return;
     const unlistenProgress = listen<OllamaPullProgress>("ollama-pull-progress", (event) => {
       setProgress(event.payload);
     });

@@ -22,7 +22,7 @@ import { useNavigate } from "react-router";
 import { useQueryClient } from "@tanstack/react-query";
 import { listen } from "@tauri-apps/api/event";
 
-import { tauriInvoke } from "@/services/tauri-client";
+import { hasTauri, tauriInvoke } from "@/services/tauri-client";
 import { QUERY_KEYS } from "@/lib/constants";
 import { useNotebookStore } from "@/stores/notebook-store";
 import type { Notebook } from "@/types/models";
@@ -82,6 +82,8 @@ export function useOpenWith() {
       .catch(() => {
         /* Not running under Tauri (dev preview): nothing to collect. */
       });
+
+    if (!hasTauri()) return;
 
     /* Files opened while the app is already running. */
     const unlisten = listen<string[]>("open-files", (event) => {
