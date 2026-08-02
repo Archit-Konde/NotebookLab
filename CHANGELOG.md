@@ -4,6 +4,15 @@ All notable changes to NotebookLab will be documented in this file.
 
 ## [Unreleased]
 
+### Changed
+
+- The format names the pickers offer and the ones the backend can build are now
+  checked against each other. A Studio or Audio Studio request carries its format
+  as a plain string across the IPC boundary and nothing on either side is checked
+  by a compiler, so adding a format to a picker without adding its prompt would
+  produce a button that fails only when pressed. Both lists are read from the
+  source and compared in both directions.
+
 ### Fixed
 
 - An import that failed could never be retried. The failed document stays in the
