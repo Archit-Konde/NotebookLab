@@ -21,7 +21,10 @@ import react from "@vitejs/plugin-react";
 import path from "path";
 import tailwindcss from "@tailwindcss/vite";
 
-const repoRoot = path.resolve(__dirname, "..");
+/* import.meta.dirname rather than __dirname: Vite is moving to a native config
+   loader in which __dirname is not defined, and it already warns on every run.
+   Available since Node 20.11, and the project builds on 22. */
+const repoRoot = path.resolve(import.meta.dirname, "..");
 
 export default defineConfig({
   root: path.join(repoRoot, "src"),

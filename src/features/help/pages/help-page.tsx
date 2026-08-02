@@ -120,7 +120,7 @@ const SECTIONS: Section[] = [
   },
   {
     id: "studio",
-    title: "The Studio",
+    title: "Studio",
     body: (
       <>
         <P>
@@ -147,17 +147,19 @@ const SECTIONS: Section[] = [
   },
   {
     id: "thinking-partner",
-    title: "Thinking Partner",
+    title: "Think",
     body: (
       <P>
-        Generate a mind map from your research, or switch to Socratic mode for probing questions that
-        push your thinking further. Both work from the active notebook's documents.
+        Build an idea space from your research: a moving three-dimensional map of the claims,
+        evidence, tensions, and open questions in your sources. Or switch to Socratic mode for
+        probing questions that push your thinking further. Both work from the active notebook's
+        documents; a flat mind map lives in the Studio.
       </P>
     ),
   },
   {
     id: "canvas",
-    title: "The Canvas",
+    title: "Canvas",
     body: (
       <>
         <P>
@@ -199,7 +201,7 @@ const SECTIONS: Section[] = [
   },
   {
     id: "transforms",
-    title: "Transforms and Prompt Studio",
+    title: "Transform and Prompt Studio",
     body: (
       <>
         <P>

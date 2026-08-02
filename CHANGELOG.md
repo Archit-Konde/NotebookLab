@@ -6,6 +6,19 @@ All notable changes to NotebookLab will be documented in this file.
 
 ### Fixed
 
+- The Help page named a feature that does not exist. It described the "Thinking
+  Partner", which the sidebar calls Think, so the page a reader opens when they
+  cannot find something sent them looking for a menu item that was not there,
+  and it still described the old mind map rather than the idea space that
+  replaced it. Three other headings carried a definite article the sidebar does
+  not. All of them now match, and a test reads the sidebar and fails if any
+  user-facing copy drifts from it again; the same drift had already happened
+  once in the first-run sample notes.
+- The Vite config used __dirname, which the native config loader Vite is moving
+  to does not define, and which it warned about on every build.
+
+### Fixed
+
 - Opening the Documents page outside the packaged app took the whole window
   down with "Something went wrong". Drag-and-drop asks Tauri for the current
   webview, which throws rather than returning nothing when the globals it reads
