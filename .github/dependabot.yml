@@ -62,7 +62,16 @@ updates:
         patterns:
           - "*"
     ignore:
-      # Block major version bumps of every action until manually verified;
-      # release-critical actions especially (tauri-action holds the signing key)
-      - dependency-name: "*"
+      # Only the release-critical action is held back. tauri-action drives the
+      # signing key and the draft-release flow, so a major bump there is a
+      # deliberate, tested change rather than something to merge on sight.
+      #
+      # Every other action used to be blocked here too, and blocking them did
+      # not keep anything stable, it made the drift invisible: checkout and
+      # setup-node fell two majors behind and the Pages actions one or two, with
+      # nothing reporting it because the only thing that would have reported it
+      # was switched off. CI exercises checkout, setup-node, rust-cache and
+      # rust-toolchain on all three platforms and the Pages workflow exercises
+      # the rest, so a bad bump fails visibly and fast.
+      - dependency-name: "tauri-apps/tauri-action"
         update-types: ["version-update:semver-major"]
