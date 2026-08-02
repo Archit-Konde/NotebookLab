@@ -19,6 +19,15 @@ use std::sync::{Mutex, RwLock};
 use super::auto_select;
 use super::traits::{ChatRequest, ChatResponse, LlmProvider, ProviderError, TokenUsage};
 
+/// What the user is told when nothing can answer a request yet.
+///
+/// There were two wordings for this: this one, and the automatic selection
+/// path's "No providers registered. Set up a model first." Besides being a
+/// second answer to the same question, that one matched none of the hints the
+/// frontend recognises, so with automatic selection on a new user got a bare
+/// sentence where every other path gives them somewhere to go.
+pub const NO_MODEL_CONNECTED: &str = "No model is connected yet. Start Ollama or a local server and NotebookLab will pick it up within a few seconds, or add a provider in Models.";
+
 pub struct ProviderRouter {
     providers: Vec<Box<dyn LlmProvider>>,
     active_index: RwLock<Option<usize>>,
@@ -285,8 +294,7 @@ impl ProviderRouter {
         window stays reachable as a last resort rather than failing outright. */
         order.sort_by_key(|entry| (std::cmp::Reverse(entry.0), std::cmp::Reverse(entry.1)));
 
-        let mut last_error =
-            ProviderError::NotAvailable("No providers registered. Set up a model first.".into());
+        let mut last_error = ProviderError::NotAvailable(NO_MODEL_CONNECTED.into());
         for (_, _, idx) in order.into_iter().take(3) {
             let Ok(provider) = self.provider_at(idx) else {
                 continue;
@@ -433,12 +441,7 @@ impl ProviderRouter {
             /* The app is now watching for a local server rather than probing
             once at startup, so this says what it is doing instead of implying
             the user must go and configure something. */
-            ProviderError::NotAvailable(
-                "No model is connected yet. Start Ollama or a local server and \
-                 NotebookLab will pick it up within a few seconds, or add a \
-                 provider in Models."
-                    .into(),
-            )
+            ProviderError::NotAvailable(NO_MODEL_CONNECTED.into())
         })
     }
 

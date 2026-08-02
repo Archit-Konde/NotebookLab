@@ -6,6 +6,13 @@ All notable changes to NotebookLab will be documented in this file.
 
 ### Fixed
 
+- The first error a new user meets came in two wordings. With nothing connected
+  yet, every AI feature fails, and what the user reads depends on whether the
+  frontend recognises the backend phrasing. One path said "No model is connected
+  yet" and offered somewhere to go; the automatic-selection path said "No
+  providers registered. Set up a model first.", which matched no hint and so
+  arrived bare. Both share one sentence now, and a test fails if a hint stops
+  matching it.
 - A damaged database stopped the app opening at all. Every failure while setting
   up the database aborted startup, so a file left half-written by a power cut or
   a killed process meant the window never appeared again, showing a line like

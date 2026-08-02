@@ -22,6 +22,8 @@ import { join } from "node:path";
 
 import { describe, expect, it } from "vitest";
 
+import { formatError } from "@/lib/format-error";
+
 const root = join(__dirname, "..", "..");
 const read = (p: string) => readFileSync(join(root, p), "utf-8");
 
@@ -52,6 +54,27 @@ describe("format contracts", () => {
     expect(backendFormats("src-tauri/src/commands/studio_commands.rs", "match format.as_str()").length)
       .toBeGreaterThan(5);
     expect(frontendFormats("src/features/studio/pages/studio-page.tsx").length).toBeGreaterThan(5);
+  });
+
+  it("shows the friendly hint for the first error a new user meets", () => {
+    /* With no model connected, every AI feature fails, and what the user reads
+       is decided by whether formatError recognises the backend's wording. The
+       automatic-selection path used to answer "No providers registered. Set up a
+       model first.", which matched no hint, so that user got a bare sentence
+       while everyone else got somewhere to go. Both paths share one constant
+       now, and this checks a hint still matches it. */
+    const router = read("src-tauri/src/providers/router.rs");
+    const message = router.match(/pub const NO_MODEL_CONNECTED: &str = "([^"]+)"/)?.[1];
+    expect(message, "NO_MODEL_CONNECTED went missing or changed shape").toBeTruthy();
+    expect(message).not.toMatch(/\s\s/);
+
+    /* Every no-provider failure must go through that one constant. Comments are
+       stripped first: the constant's own note quotes the wording it replaced,
+       and explaining a retired message is not the same as sending it. */
+    const code = router.replace(/\/\/\/.*$/gm, "").replace(/\/\*[\s\S]*?\*\//g, "");
+    expect(code).not.toContain("No providers registered");
+
+    expect(formatError(new Error(message!))).not.toBe(message);
   });
 
   it("offers exactly the Studio formats the backend can build", () => {
