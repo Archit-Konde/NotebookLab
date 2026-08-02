@@ -4,6 +4,8 @@ All notable changes to NotebookLab will be documented in this file.
 
 ## [Unreleased]
 
+## [0.8.8] - 2026-08-02
+
 ### Changed
 
 - The format names the pickers offer and the ones the backend can build are now
