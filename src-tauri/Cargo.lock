@@ -2530,7 +2530,7 @@ dependencies = [
 
 [[package]]
 name = "notebooklab"
-version = "0.8.6"
+version = "0.8.7"
 dependencies = [
  "chrono",
  "image",
