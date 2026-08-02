@@ -321,9 +321,9 @@ mod tests {
                 format!("c{}", i + 1)
             };
             conn.execute(
-                "INSERT INTO embeddings (id, chunk_id, vector, dimensions, created_at)
-                 VALUES (?1, ?2, ?3, 4, '2026-01-01')",
-                rusqlite::params![format!("e{i}"), id, blob],
+                "INSERT INTO embeddings (chunk_id, vector, dimensions, created_at)
+                 VALUES (?1, ?2, 4, '2026-01-01')",
+                rusqlite::params![id, blob],
             )
             .unwrap();
         }
