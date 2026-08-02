@@ -4,6 +4,39 @@ All notable changes to NotebookLab will be documented in this file.
 
 ## [Unreleased]
 
+## [0.8.5] - 2026-08-02
+
+### Changed
+
+- Dependency audit across both ecosystems. npm reports no vulnerabilities and
+  every package is on its latest release except TypeScript, which is held at 6
+  because typescript-eslint 8.65.0, the newest there is, still declares support
+  only up to TypeScript 6.1: moving to 7 would ship with linting broken.
+- Rust crates updated where the change was verifiable: rusqlite 0.32 to 0.40,
+  zip 4 to 8, quick-xml 0.39 to 0.41, pdf-extract 0.10 to 0.12. The docx tests
+  write a real zip and read it back through quick-xml, so those two are checked
+  by more than compilation.
+- quick-xml 0.41 requires the XML version at each call and deprecated
+  unescape_value. Word writes XML 1.0 and the parser never reads the
+  declaration, so 1.0 is stated explicitly and the deprecated call is gone.
+- reqwest is held at 0.12 deliberately. Version 0.13 replaces the default TLS
+  backend with rustls and aws-lc-rs, which pulls a C toolchain and cmake into
+  the build and moves certificate verification off the operating system trust
+  store. A machine behind a corporate proxy with its own certificate authority
+  would stop reaching cloud providers, and no test here could catch it.
+- sha2 is held at 0.10 deliberately. Version 0.11 changes the digest output
+  type, and that value is the file hash used to recognise a document already
+  imported; a changed hash would make every existing document look new.
+- rten stays at 0.24 because ocrs, which reads scanned pages, requires it.
+- Every GitHub Actions pin updated: checkout and setup-node to v7, the Pages
+  actions to their current majors, rust-cache and rust-toolchain to their
+  current commits. Dependabot had been told to ignore major bumps for all
+  actions, which did not keep them stable, it kept the drift invisible; only
+  tauri-action, which holds the signing key, stays held back now.
+- The REST API server no longer contains an unwrap. Both were building a header
+  from compile-time constants and could not fail, but a server thread with no
+  panic path at all is a simpler thing to reason about.
+
 ### Changed
 
 - Home no longer repeats what is already on screen. It opened with the mark and
