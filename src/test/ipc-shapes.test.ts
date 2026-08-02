@@ -87,6 +87,31 @@ function tsShapes(): Map<string, Set<string>> {
   return shapes;
 }
 
+/** A Rust enum's wire values, applying its serde rename_all rule. */
+function wireValues(file: string, name: string): string[] {
+  const source = read(file);
+  const at = source.indexOf("pub enum " + name);
+  if (at === -1) return [];
+  /* The rename_all attribute sits just above the enum. */
+  const before = source.slice(Math.max(0, at - 200), at);
+  const rule = before.match(/rename_all = "([a-z_]+)"/)?.[1] ?? "";
+  const open = source.indexOf("{", at);
+  const close = source.indexOf("}", open);
+  const body = source.slice(open + 1, close);
+  return [...body.matchAll(/^\s*([A-Z]\w*),/gm)].map((v) => {
+    const variant = v[1];
+    if (rule === "lowercase") return variant.toLowerCase();
+    if (rule === "snake_case") return variant.replace(/(?<!^)(?=[A-Z])/g, "_").toLowerCase();
+    return variant;
+  });
+}
+
+/** The string members of a TypeScript union. */
+function unionMembers(file: string, pattern: RegExp): string[] {
+  const m = read(file).match(pattern);
+  return m ? [...m[1].matchAll(/"([a-z_]+)"/g)].map((x) => x[1]) : [];
+}
+
 describe("IPC result shapes", () => {
   const rust = rustShapes();
   const ts = tsShapes();
@@ -96,6 +121,47 @@ describe("IPC result shapes", () => {
     expect(rust.size).toBeGreaterThan(10);
     expect(ts.size).toBeGreaterThan(20);
     expect(shared.length).toBeGreaterThan(8);
+  });
+
+  it("spells every enum the same on both sides of the boundary", () => {
+    /* These decide what the interface shows. A document is only offered as a
+       source once its status reads "processed", and the progress bar only
+       clears once a job reads "done", so a variant renamed on one side leaves
+       documents permanently unavailable or generations permanently running,
+       with no error anywhere to say why. serde's rename_all decides the wire
+       spelling, and nothing checks it against the union that reads it. */
+    const cases: [string, string, string, RegExp][] = [
+      [
+        "src-tauri/src/database/models/document.rs",
+        "DocumentStatus",
+        "src/types/models.ts",
+        /status:\s*("pending"[^;]*);/,
+      ],
+      [
+        "src-tauri/src/services/sidecar_service.rs",
+        "SidecarState",
+        "src/types/models.ts",
+        /state:\s*("stopped"[^;]*);/,
+      ],
+      [
+        "src-tauri/src/services/job_service.rs",
+        "JobStatus",
+        "src/stores/job-store.ts",
+        /type JobStatus\s*=\s*([^;]+);/,
+      ],
+    ];
+
+    const wrong: string[] = [];
+    for (const [rustFile, enumName, tsFile, pattern] of cases) {
+      const rust = wireValues(rustFile, enumName).sort();
+      const ts = unionMembers(tsFile, pattern).sort();
+      expect(rust.length, `${enumName} was not found in ${rustFile}`).toBeGreaterThan(2);
+      expect(ts.length, `the union for ${enumName} was not found in ${tsFile}`).toBeGreaterThan(2);
+      if (rust.join(",") !== ts.join(",")) {
+        wrong.push(`${enumName}: Rust sends [${rust}], TypeScript expects [${ts}]`);
+      }
+    }
+    expect(wrong).toEqual([]);
   });
 
   it("never reads a field Rust does not send", () => {

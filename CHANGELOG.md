@@ -8,6 +8,11 @@ All notable changes to NotebookLab will be documented in this file.
 
 ### Changed
 
+- The wire spelling of every enum that crosses the boundary is checked against
+  the union that reads it. A document is only offered as a source once its
+  status reads "processed" and a progress bar only clears once a job reads
+  "done", so a variant renamed on one side would leave documents permanently
+  unavailable or generations permanently running, with nothing to say why.
 - The fields TypeScript reads off a command result are now checked against the
   ones Rust sends. Rename a field in Rust and the TypeScript still compiles and
   lints, then reads undefined at runtime, which shows as a blank label or a
