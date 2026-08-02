@@ -4,6 +4,8 @@ All notable changes to NotebookLab will be documented in this file.
 
 ## [Unreleased]
 
+## [0.8.12] - 2026-08-02
+
 ### Fixed
 
 - The same search could return the same passages in a different order between
