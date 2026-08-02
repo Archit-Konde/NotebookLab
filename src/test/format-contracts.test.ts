@@ -17,7 +17,7 @@
  * Date: 2026-08-02
  */
 
-import { readFileSync } from "node:fs";
+import { readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 
 import { describe, expect, it } from "vitest";
@@ -26,6 +26,75 @@ import { formatError } from "@/lib/format-error";
 
 const root = join(__dirname, "..", "..");
 const read = (p: string) => readFileSync(join(root, p), "utf-8");
+
+/** Every event name the Rust side emits, resolving `const` names to their value. */
+function emittedEvents(): string[] {
+  const files = rustFiles();
+  const consts = new Map<string, string>();
+  for (const file of files) {
+    for (const m of read(file).matchAll(/pub const (\w+): &str = "([a-z0-9-]+)";/g)) {
+      consts.set(m[1], m[2]);
+    }
+  }
+  const names = new Set<string>();
+  for (const file of files) {
+    const code = read(file);
+    for (const m of code.matchAll(/\.emit\(\s*"([a-z0-9-]+)"/g)) names.add(m[1]);
+    for (const m of code.matchAll(/\.emit\(\s*([A-Z_]+)\s*,/g)) {
+      const value = consts.get(m[1]);
+      if (value) names.add(value);
+    }
+  }
+  return [...names].sort();
+}
+
+/** Every event name the frontend listens for, resolving imported constants. */
+function listenedEvents(): string[] {
+  const files = userFacingFiles();
+  const consts = new Map<string, string>();
+  for (const file of files) {
+    for (const m of read(file).matchAll(/export const (\w+) = "([a-z0-9-]+)";/g)) {
+      consts.set(m[1], m[2]);
+    }
+  }
+  const names = new Set<string>();
+  for (const file of files) {
+    const code = read(file);
+    for (const m of code.matchAll(/listen(?:<[^>]*>)?\(\s*"([a-z0-9-]+)"/g)) names.add(m[1]);
+    for (const m of code.matchAll(/listen(?:<[^>]*>)?\(\s*([A-Z_]+)\s*,/g)) {
+      const value = consts.get(m[1]);
+      if (value) names.add(value);
+    }
+  }
+  return [...names].sort();
+}
+
+function rustFiles(): string[] {
+  const out: string[] = [];
+  const walk = (dir: string) => {
+    for (const entry of readdirSync(join(root, dir), { withFileTypes: true })) {
+      const rel = `${dir}/${entry.name}`;
+      if (entry.isDirectory()) walk(rel);
+      else if (entry.name.endsWith(".rs")) out.push(rel);
+    }
+  };
+  walk("src-tauri/src");
+  return out;
+}
+
+function userFacingFiles(): string[] {
+  const out: string[] = [];
+  const walk = (dir: string) => {
+    for (const entry of readdirSync(join(root, dir), { withFileTypes: true })) {
+      const rel = `${dir}/${entry.name}`;
+      if (entry.isDirectory()) walk(rel);
+      else if (/\.tsx?$/.test(entry.name)) out.push(rel);
+    }
+  };
+  walk("src");
+  return out;
+}
+
 
 /** The arms of the backend's `match format.as_str()`, i.e. what it can build. */
 function backendFormats(file: string, matchOn: string): string[] {
@@ -75,6 +144,19 @@ describe("format contracts", () => {
     expect(code).not.toContain("No providers registered");
 
     expect(formatError(new Error(message!))).not.toBe(message);
+  });
+
+  it("listens for exactly the events the backend emits", () => {
+    /* An event name is a string agreed by two languages and checked by neither.
+       Renaming one side leaves the other listening for something that never
+       arrives: no error, no failed request, just a progress bar that never
+       moves or a download that never reports finishing. */
+    const emitted = emittedEvents();
+    const listened = listenedEvents();
+    expect(emitted.length).toBeGreaterThan(5);
+    expect(listened.length).toBeGreaterThan(5);
+    expect(emitted.filter((e) => !listened.includes(e))).toEqual([]);
+    expect(listened.filter((e) => !emitted.includes(e))).toEqual([]);
   });
 
   it("offers exactly the Studio formats the backend can build", () => {
