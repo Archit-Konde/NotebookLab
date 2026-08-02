@@ -341,9 +341,6 @@ mod tests {
         let dir = scratch("corrupt");
         let db = dir.join("notebooklab.db");
         std::fs::write(&db, b"this is not a database, not even slightly").unwrap();
-        /* A leftover write-ahead log has to travel with it; left behind, SQLite
-        would replay it into the replacement. */
-        std::fs::write(dir.join("notebooklab.db-wal"), b"stale log").unwrap();
 
         let conn = super::AppState::open_or_recover(&db).expect("the app must still start");
 
@@ -363,15 +360,36 @@ mod tests {
                 .any(|n| n.contains("unreadable") && n.ends_with(".db")),
             "the damaged file must be kept, not deleted: {names:?}"
         );
+        std::fs::remove_dir_all(&dir).ok();
+    }
+
+    #[test]
+    fn setting_a_database_aside_takes_its_companion_files() {
+        /* The write-ahead log and shared-memory file belong to the database
+        they were written for, and a log left beside the replacement is a log
+        SQLite may try to replay into it.
+
+        This calls the move directly rather than going through a failed open,
+        because it cannot be observed that way: closing the connection after the
+        failed open makes SQLite delete the log itself, so it is already gone by
+        the time the file is renamed. The move still has to be right for the
+        cases where a log does survive, such as a process killed mid-write. */
+        let dir = scratch("companions");
+        let db = dir.join("notebooklab.db");
+        std::fs::write(&db, b"not a database").unwrap();
+        std::fs::write(dir.join("notebooklab.db-wal"), b"stale log").unwrap();
+        std::fs::write(dir.join("notebooklab.db-shm"), b"stale shm").unwrap();
+
+        let preserved = super::AppState::set_corrupt_database_aside(&db).unwrap();
+
+        assert!(preserved.exists(), "the database itself must be kept");
+        let wal = std::path::PathBuf::from(format!("{}-wal", preserved.display()));
+        let shm = std::path::PathBuf::from(format!("{}-shm", preserved.display()));
+        assert!(wal.exists(), "the write-ahead log must move with it");
+        assert!(shm.exists(), "the shared-memory file must move with it");
         assert!(
-            names
-                .iter()
-                .any(|n| n.contains("unreadable") && n.ends_with(".db-wal")),
-            "its write-ahead log must move with it: {names:?}"
-        );
-        assert!(
-            !names.iter().any(|n| n == "notebooklab.db-wal"),
-            "no stale log may be left beside the new database: {names:?}"
+            !dir.join("notebooklab.db-wal").exists(),
+            "no stale log may be left where the new database will be created"
         );
         std::fs::remove_dir_all(&dir).ok();
     }
