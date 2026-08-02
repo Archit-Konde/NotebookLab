@@ -56,6 +56,23 @@ pub fn search_chunks(
 /// Hybrid search: merge keyword hits with vector-similarity hits when a query
 /// embedding is available. Uses reciprocal rank fusion (k=60) so a chunk that
 /// ranks well on either signal surfaces, and one that ranks on both wins.
+/// Order two fused results: best score first, chunk id to settle a tie.
+///
+/// Reciprocal rank fusion ties readily. A passage ranked first by keyword and
+/// fourth by vector scores exactly what a passage ranked fourth by keyword and
+/// first by vector scores, because the two contributions are the same pair of
+/// numbers added in the other order. The fused scores are collected in a
+/// HashMap, whose iteration order Rust varies on purpose, so without a
+/// tie-break those two passages come back in a different order from one launch
+/// to the next. They become the sources a chat answer cites, which would mean
+/// the same question answered from different quotes.
+fn rank_order(a: &SearchResult, b: &SearchResult) -> std::cmp::Ordering {
+    b.score
+        .partial_cmp(&a.score)
+        .unwrap_or(std::cmp::Ordering::Equal)
+        .then_with(|| a.chunk_id.cmp(&b.chunk_id))
+}
+
 pub fn search_chunks_hybrid(
     conn: &Connection,
     notebook_id: &str,
@@ -116,11 +133,7 @@ pub fn search_chunks_hybrid(
     on score alone therefore left the same query returning the same passages in a
     different order from one run to the next, and, since these become the sources a
     chat answer is built from, the same question quoting different passages. */
-    merged.sort_by(|a, b| {
-        b.score
-            .partial_cmp(&a.score)
-            .unwrap_or(std::cmp::Ordering::Equal)
-    });
+    merged.sort_by(rank_order);
     merged.truncate(limit);
     Ok(merged)
 }
@@ -329,39 +342,58 @@ mod tests {
         conn
     }
 
+    fn result(chunk_id: &str, score: f64) -> SearchResult {
+        SearchResult {
+            chunk_id: chunk_id.to_string(),
+            document_id: "doc".to_string(),
+            document_title: "Doc".to_string(),
+            content: String::new(),
+            heading_context: String::new(),
+            page_number: None,
+            score,
+        }
+    }
+
     #[test]
-    fn hybrid_search_breaks_ties_by_chunk_id() {
-        /* The fused scores live in a HashMap, and Rust varies hash iteration
-        order. Sorting on score alone left tied passages, which are ordinary when
-        two ranked lists place different things equally, coming back in whatever
-        order the map happened to yield. These passages become the sources a chat
-        answer cites, so the same question could be answered from different
-        quotes on different launches.
+    fn equal_scores_are_ordered_by_chunk_id() {
+        /* Reciprocal rank fusion produces exact ties: first-by-keyword and
+        fourth-by-vector scores the same as fourth-by-keyword and first-by-vector,
+        being the same two numbers added the other way round. The fused scores sit
+        in a HashMap, whose iteration order Rust varies deliberately, so without
+        this rule those two passages swap places between launches, and they are
+        the sources a chat answer quotes.
 
-        Repeating the search in one process cannot show this: the hash seed is
-        chosen once per process, so every call in a single test agrees with
-        itself no matter what. What is checked instead is the property that makes
-        the order stable at all, which is that equal scores fall back to the
-        chunk id. */
-        let conn = db_with_embedded_chunks(6);
-        let query: Vec<f32> = vec![0.5, 0.5, 0.5, 0.5];
-
-        let ids: Vec<String> = search_chunks_hybrid(&conn, "nb", "quantum", Some(&query), 10)
-            .unwrap()
-            .into_iter()
-            .map(|r| r.chunk_id)
-            .collect();
-
-        assert!(
-            ids.len() > 4,
-            "expected several tied hits, got {}",
-            ids.len()
-        );
-        let mut expected = ids.clone();
-        expected.sort();
+        The rule is tested directly rather than through a search. Repeating a
+        search in one process proves nothing, because the hash seed is chosen once
+        per process and every call in a single run therefore agrees with itself. */
+        let tied = 1.0 / 61.0 + 1.0 / 64.0;
+        let mut results = vec![
+            result("zzz", tied),
+            result("aaa", tied),
+            result("mmm", tied),
+        ];
+        results.sort_by(rank_order);
         assert_eq!(
-            ids, expected,
-            "tied passages must come back in chunk id order, not hash order"
+            results
+                .iter()
+                .map(|r| r.chunk_id.as_str())
+                .collect::<Vec<_>>(),
+            ["aaa", "mmm", "zzz"],
+            "tied passages must be ordered by chunk id, not by hash order"
+        );
+    }
+
+    #[test]
+    fn a_better_score_still_wins_over_the_tie_break() {
+        let mut results = vec![result("aaa", 0.01), result("zzz", 0.99)];
+        results.sort_by(rank_order);
+        assert_eq!(
+            results
+                .iter()
+                .map(|r| r.chunk_id.as_str())
+                .collect::<Vec<_>>(),
+            ["zzz", "aaa"],
+            "the chunk id must only settle ties, never outrank a score"
         );
     }
 
