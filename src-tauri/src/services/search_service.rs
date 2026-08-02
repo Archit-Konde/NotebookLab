@@ -120,6 +120,7 @@ pub fn search_chunks_hybrid(
         b.score
             .partial_cmp(&a.score)
             .unwrap_or(std::cmp::Ordering::Equal)
+            .then_with(|| a.chunk_id.cmp(&b.chunk_id))
     });
     merged.truncate(limit);
     Ok(merged)
@@ -330,35 +331,39 @@ mod tests {
     }
 
     #[test]
-    fn hybrid_search_returns_the_same_order_every_time() {
-        /* The fused scores are collected in a HashMap, and Rust varies hash
-        iteration order deliberately. Sorting on score alone left tied passages,
-        which are ordinary when two lists rank different things equally, coming
-        back in a different order from one run to the next. These passages become
-        the sources a chat answer cites, so the same question could be answered
-        from different quotes. */
+    fn hybrid_search_breaks_ties_by_chunk_id() {
+        /* The fused scores live in a HashMap, and Rust varies hash iteration
+        order. Sorting on score alone left tied passages, which are ordinary when
+        two ranked lists place different things equally, coming back in whatever
+        order the map happened to yield. These passages become the sources a chat
+        answer cites, so the same question could be answered from different
+        quotes on different launches.
+
+        Repeating the search in one process cannot show this: the hash seed is
+        chosen once per process, so every call in a single test agrees with
+        itself no matter what. What is checked instead is the property that makes
+        the order stable at all, which is that equal scores fall back to the
+        chunk id. */
         let conn = db_with_embedded_chunks(6);
         let query: Vec<f32> = vec![0.5, 0.5, 0.5, 0.5];
 
-        let first: Vec<String> = search_chunks_hybrid(&conn, "nb", "quantum", Some(&query), 5)
+        let ids: Vec<String> = search_chunks_hybrid(&conn, "nb", "quantum", Some(&query), 10)
             .unwrap()
             .into_iter()
             .map(|r| r.chunk_id)
             .collect();
-        assert!(first.len() > 1, "expected several hits to order");
 
-        /* Once is luck; a hash-order failure only shows up across runs. */
-        for attempt in 0..25 {
-            let again: Vec<String> = search_chunks_hybrid(&conn, "nb", "quantum", Some(&query), 5)
-                .unwrap()
-                .into_iter()
-                .map(|r| r.chunk_id)
-                .collect();
-            assert_eq!(
-                again, first,
-                "hybrid search reordered itself on attempt {attempt}"
-            );
-        }
+        assert!(
+            ids.len() > 4,
+            "expected several tied hits, got {}",
+            ids.len()
+        );
+        let mut expected = ids.clone();
+        expected.sort();
+        assert_eq!(
+            ids, expected,
+            "tied passages must come back in chunk id order, not hash order"
+        );
     }
 
     #[test]
