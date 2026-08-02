@@ -78,8 +78,8 @@ tiny_http = "0.12"
 # DOCX text extraction: a .docx is a ZIP of XML. `zip` opens the container
 # (pure-Rust DEFLATE via flate2/miniz_oxide, no C codecs) and `quick-xml`
 # pull-parses word/document.xml.
-zip = { version = "4.2.0", default-features = false, features = ["deflate-flate2"] }
-quick-xml = "0.39.4"
+zip = { version = "8.6", default-features = false, features = ["deflate-flate2"] }
+quick-xml = "0.41"
 
 # Offline OCR for images. ocrs is a pure-Rust OCR engine on the rten ML runtime
 # (no ONNXRuntime, no system libraries), so it cross-compiles cleanly. The two
