@@ -104,6 +104,19 @@ describe("help page naming", () => {
     expect(wrong).toEqual([]);
   });
 
+  it("labels a palette destination the way the sidebar labels it", () => {
+    /* The palette is a second route to every page, so it is a second place the
+       names can drift. It offered "Transforms" while the sidebar said
+       "Transform": close enough to still find by typing, far enough to read as
+       two different features. */
+    const palette = read("src/components/shared/command-palette.tsx");
+    const labels = new Set(sidebarLabels());
+    const entries = [...palette.matchAll(/\{\s*label:\s*"([^"]+)",\s*route:\s*ROUTES\./g)]
+      .map((m) => m[1]);
+    expect(entries.length).toBeGreaterThan(10);
+    expect(entries.filter((label) => !labels.has(label))).toEqual([]);
+  });
+
   it("points at each of the app's tools somewhere", () => {
     /* A tool the Help page never mentions is one the user has to find alone. */
     for (const tool of ["Chat", "Think", "Studio", "Canvas", "Transform", "Audio Studio", "Prompt Studio", "Models", "Search"]) {
