@@ -4,6 +4,22 @@ All notable changes to NotebookLab will be documented in this file.
 
 ## [Unreleased]
 
+### Fixed
+
+- An import that failed could never be retried. The failed document stays in the
+  library so it is visible rather than vanishing, and its file hash stayed with
+  it, so importing the same file again answered "this file has already been
+  imported", which claims a success that never happened and left no way forward
+  except finding the failed row and deleting it by hand. A failed attempt is
+  replaced now, so trying again simply works. A document still processing is
+  left alone, since it may belong to an import running at that moment.
+- An Ollama download that died took every later one with it. The slot marking a
+  pull in progress was cleared on the last line of the download thread, so a
+  thread that failed hard left it occupied and the app refused new downloads,
+  claiming one was already running, until it was restarted. It is released
+  automatically now, however the download ends. The bundled model downloader had
+  the same shape and was fixed earlier; this was its twin.
+
 ## [0.8.7] - 2026-08-02
 
 ### Fixed

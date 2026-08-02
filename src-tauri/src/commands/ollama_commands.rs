@@ -27,6 +27,33 @@ use crate::services::ollama_service::{self, OllamaModel, OllamaStatus, PullProgr
 /// progress display after the user navigates away and back mid-download.
 static CURRENT_PULL: Mutex<Option<String>> = Mutex::new(None);
 
+/// Holds the pull slot and frees it however the download thread ends, a panic
+/// included. Clearing it on the last line of the thread instead meant a thread
+/// that died left the slot occupied, and the app then refused every later
+/// download saying one was already running, until it was restarted. The model
+/// downloader had the same shape and the same fix.
+struct PullGuard;
+
+impl PullGuard {
+    /// Claim the slot for `model`, or None when a pull is already running.
+    fn acquire(model: &str) -> Option<Self> {
+        let mut current = CURRENT_PULL.lock().ok()?;
+        if current.is_some() {
+            return None;
+        }
+        *current = Some(model.to_string());
+        Some(PullGuard)
+    }
+}
+
+impl Drop for PullGuard {
+    fn drop(&mut self) {
+        if let Ok(mut current) = CURRENT_PULL.lock() {
+            *current = None;
+        }
+    }
+}
+
 /// Terminal event emitted after a pull ends, success or failure.
 #[derive(Clone, serde::Serialize)]
 struct PullFinished {
@@ -57,19 +84,16 @@ pub async fn ollama_installed_models() -> AppResult<Vec<OllamaModel>> {
 pub fn ollama_pull_model(app: tauri::AppHandle, model: String) -> AppResult<()> {
     ollama_service::validate_model_name(&model)?;
 
-    {
-        let mut current = CURRENT_PULL
-            .lock()
-            .map_err(|_| AppError::Internal("Pull guard poisoned".into()))?;
-        if current.is_some() {
-            return Err(AppError::InvalidInput(
-                "A model download is already in progress".into(),
-            ));
-        }
-        *current = Some(model.clone());
-    }
+    let Some(guard) = PullGuard::acquire(&model) else {
+        return Err(AppError::InvalidInput(
+            "A model download is already in progress".into(),
+        ));
+    };
 
     std::thread::spawn(move || {
+        /* Held for the whole download and released when this thread ends by any
+        route, so a failure cannot lock out every later one. */
+        let _guard = guard;
         let result = ollama_service::pull_model(&model, |progress: PullProgress| {
             app.emit("ollama-pull-progress", &progress).ok();
         });
@@ -93,10 +117,6 @@ pub fn ollama_pull_model(app: tauri::AppHandle, model: String) -> AppResult<()> 
         } else {
             tracing::info!("Ollama pull complete: {model}");
         }
-
-        if let Ok(mut current) = CURRENT_PULL.lock() {
-            *current = None;
-        }
     });
 
     Ok(())
@@ -118,4 +138,45 @@ pub async fn ollama_delete_model(model: String) -> AppResult<()> {
     tauri::async_runtime::spawn_blocking(move || ollama_service::delete_model(&model))
         .await
         .map_err(|e| AppError::Internal(format!("Delete task failed: {e}")))?
+}
+
+#[cfg(test)]
+mod guard_tests {
+    use super::{PullGuard, CURRENT_PULL};
+
+    /// One test on purpose: the slot is process-wide and Rust runs tests in
+    /// parallel, so two tests claiming it would fight over the same static.
+    #[test]
+    fn the_pull_slot_admits_one_download_and_always_frees() {
+        assert!(
+            CURRENT_PULL.lock().unwrap().is_none(),
+            "slot should start free"
+        );
+
+        {
+            let _first = PullGuard::acquire("llama3").expect("slot should be free");
+            assert_eq!(CURRENT_PULL.lock().unwrap().as_deref(), Some("llama3"));
+            assert!(
+                PullGuard::acquire("mistral").is_none(),
+                "a second download must be refused while one runs"
+            );
+        }
+        assert!(
+            CURRENT_PULL.lock().unwrap().is_none(),
+            "leaving the scope must free the slot"
+        );
+
+        /* Why the guard exists rather than a clear on the thread's last line: a
+        thread that panicked used to leave the slot taken, and every later pull
+        was refused as "already in progress" until the app restarted. */
+        let panicked = std::panic::catch_unwind(|| {
+            let _guard = PullGuard::acquire("gemma").expect("slot should be free");
+            panic!("the pull thread died");
+        });
+        assert!(panicked.is_err(), "the panic should have propagated");
+        assert!(
+            CURRENT_PULL.lock().unwrap().is_none(),
+            "a panicking pull must not block every later download"
+        );
+    }
 }
