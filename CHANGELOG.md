@@ -4,6 +4,15 @@ All notable changes to NotebookLab will be documented in this file.
 
 ## [Unreleased]
 
+### Changed
+
+- The argument names every command is called with are now checked against the
+  ones it declares. They cross as a JSON object and are matched by serde on
+  name, with nothing on either side checked by a compiler, so renaming a Rust
+  parameter or mistyping a key in TypeScript compiles and lints cleanly and then
+  fails the moment a user presses the button. All fifty-two call sites agree
+  today; the test keeps them agreeing.
+
 ## [0.8.10] - 2026-08-02
 
 ### Changed
