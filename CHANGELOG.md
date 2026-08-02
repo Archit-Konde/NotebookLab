@@ -4,6 +4,17 @@ All notable changes to NotebookLab will be documented in this file.
 
 ## [Unreleased]
 
+### Fixed
+
+- The same search could return the same passages in a different order between
+  launches, and with them a different set of sources for a chat answer.
+  Reciprocal rank fusion ties readily: a passage ranked first by keyword and
+  fourth by meaning scores exactly what a passage ranked fourth by keyword and
+  first by meaning scores, being the same two numbers added the other way round.
+  The fused scores are gathered in a hash map, whose iteration order Rust varies
+  on purpose, so nothing decided which of two tied passages came first. Ties are
+  settled by passage id now, which is arbitrary but the same every time.
+
 ## [0.8.11] - 2026-08-02
 
 ### Changed
