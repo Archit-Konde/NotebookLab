@@ -70,7 +70,6 @@ fn rank_order(a: &SearchResult, b: &SearchResult) -> std::cmp::Ordering {
     b.score
         .partial_cmp(&a.score)
         .unwrap_or(std::cmp::Ordering::Equal)
-        .then_with(|| a.chunk_id.cmp(&b.chunk_id))
 }
 
 pub fn search_chunks_hybrid(
