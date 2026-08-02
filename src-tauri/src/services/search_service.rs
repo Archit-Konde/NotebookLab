@@ -110,10 +110,17 @@ pub fn search_chunks_hybrid(
         })
         .collect();
 
+    /* Chunk id breaks ties, and ties are ordinary here: two passages at the same
+    rank in their respective lists score identically, and the fused scores are
+    collected in a HashMap, whose iteration order Rust deliberately varies. Sorting
+    on score alone therefore left the same query returning the same passages in a
+    different order from one run to the next, and, since these become the sources a
+    chat answer is built from, the same question quoting different passages. */
     merged.sort_by(|a, b| {
         b.score
             .partial_cmp(&a.score)
             .unwrap_or(std::cmp::Ordering::Equal)
+            .then_with(|| a.chunk_id.cmp(&b.chunk_id))
     });
     merged.truncate(limit);
     Ok(merged)
@@ -283,6 +290,83 @@ mod tests {
         )
         .unwrap();
         conn
+    }
+
+    /// A database with several chunks and an embedding for each, so the two
+    /// ranked lists that hybrid search fuses both have something in them.
+    fn db_with_embedded_chunks(count: usize) -> Connection {
+        let conn = db_with_chunk("quantum entanglement appears here");
+        conn.execute_batch(include_str!(
+            "../../resources/migrations/004_embeddings.sql"
+        ))
+        .unwrap();
+        for i in 0..count {
+            let id = format!("c{}", i + 2);
+            conn.execute(
+                "INSERT INTO chunks (id, document_id, content, position, heading_context,
+                                     token_count, created_at)
+                 VALUES (?1, 'doc', 'quantum entanglement appears here too', ?2, '', 10, '2026-01-01')",
+                rusqlite::params![id, (i + 1) as i32],
+            )
+            .unwrap();
+        }
+        /* Identical vectors, so every chunk scores the same and the fused ranks
+        tie: exactly the case whose order used to depend on hash iteration. */
+        let vector: Vec<f32> = vec![0.5, 0.5, 0.5, 0.5];
+        let blob: Vec<u8> = vector.iter().flat_map(|f| f.to_le_bytes()).collect();
+        for i in 0..=count {
+            let id = if i == 0 {
+                "c1".to_string()
+            } else {
+                format!("c{}", i + 1)
+            };
+            conn.execute(
+                "INSERT INTO embeddings (id, chunk_id, vector, dimensions, created_at)
+                 VALUES (?1, ?2, ?3, 4, '2026-01-01')",
+                rusqlite::params![format!("e{i}"), id, blob],
+            )
+            .unwrap();
+        }
+        conn
+    }
+
+    #[test]
+    fn hybrid_search_returns_the_same_order_every_time() {
+        /* The fused scores are collected in a HashMap, and Rust varies hash
+        iteration order deliberately. Sorting on score alone left tied passages,
+        which are ordinary when two lists rank different things equally, coming
+        back in a different order from one run to the next. These passages become
+        the sources a chat answer cites, so the same question could be answered
+        from different quotes. */
+        let conn = db_with_embedded_chunks(6);
+        let query: Vec<f32> = vec![0.5, 0.5, 0.5, 0.5];
+
+        let first: Vec<String> = search_chunks_hybrid(&conn, "nb", "quantum", Some(&query), 5)
+            .unwrap()
+            .into_iter()
+            .map(|r| r.chunk_id)
+            .collect();
+        assert!(first.len() > 1, "expected several hits to order");
+
+        /* Once is luck; a hash-order failure only shows up across runs. */
+        for attempt in 0..25 {
+            let again: Vec<String> = search_chunks_hybrid(&conn, "nb", "quantum", Some(&query), 5)
+                .unwrap()
+                .into_iter()
+                .map(|r| r.chunk_id)
+                .collect();
+            assert_eq!(
+                again, first,
+                "hybrid search reordered itself on attempt {attempt}"
+            );
+        }
+    }
+
+    #[test]
+    fn hybrid_search_without_a_query_vector_is_plain_keyword_search() {
+        let conn = db_with_embedded_chunks(3);
+        let hits = search_chunks_hybrid(&conn, "nb", "quantum", None, 5).unwrap();
+        assert!(!hits.is_empty(), "keyword search should still answer");
     }
 
     #[test]
