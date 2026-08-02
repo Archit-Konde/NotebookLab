@@ -4,6 +4,8 @@ All notable changes to NotebookLab will be documented in this file.
 
 ## [Unreleased]
 
+## [0.8.10] - 2026-08-02
+
 ### Changed
 
 - Four agreements that no compiler checks are now checked by tests: the event
