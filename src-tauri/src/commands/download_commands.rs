@@ -154,11 +154,7 @@ pub fn download_gguf_model(app: tauri::AppHandle, id: String) -> AppResult<Strin
         .iter()
         .find(|e| e.id == id)
         .ok_or_else(|| AppError::InvalidInput(format!("Unknown model id: {id}")))?;
-    download_model(
-        app,
-        Some(entry.url.to_string()),
-        Some(entry.filename.to_string()),
-    )
+    download_model(app, entry.url.to_string(), entry.filename.to_string())
 }
 
 /// Allowed download hosts. Only trusted model repositories.
@@ -248,23 +244,15 @@ pub struct DownloadProgress {
     pub status: String, /* "downloading", "complete", "error" */
 }
 
-/// Download the default model for first-launch experience.
-/// Returns immediately; progress is reported via events.
-#[tauri::command(rename_all = "snake_case")]
-pub fn download_default_model(app: tauri::AppHandle) -> AppResult<String> {
-    download_model(app, None, None)
-}
-
-/// Download a GGUF model from a URL. If url is None, uses the default model.
-/// Progress is reported via "model-download-progress" Tauri events.
-/// Returns the expected output path (file may not exist yet if download is async).
-/// Internal helper behind download_default_model; not exposed over IPC because
-/// no interface offers custom model URLs yet.
-fn download_model(
-    app: tauri::AppHandle,
-    url: Option<String>,
-    filename: Option<String>,
-) -> AppResult<String> {
+/// Download a GGUF model. Progress is reported via "model-download-progress"
+/// Tauri events, and the returned path is where the file will land, which it
+/// does not occupy until the download finishes.
+///
+/// Not exposed over IPC: the only way in is `download_gguf_model`, which takes a
+/// catalog id, so no interface can name an arbitrary URL. The url and filename
+/// were optional while a separate command downloaded a hardcoded default; the
+/// catalog carries that model now, so both are always supplied.
+fn download_model(app: tauri::AppHandle, url: String, filename: String) -> AppResult<String> {
     /* Prevent concurrent downloads. The guard releases itself on every path
     out of this function, including the ones that return early below. */
     let Some(guard) = DownloadGuard::acquire() else {
@@ -273,10 +261,10 @@ fn download_model(
         ));
     };
 
-    let download_url = url.as_deref().unwrap_or(DEFAULT_MODEL_URL);
+    let download_url = url.as_str();
 
     /* Sanitize filename: reject path separators and traversal */
-    let model_name = filename.as_deref().unwrap_or(DEFAULT_MODEL_NAME);
+    let model_name = filename.as_str();
     if model_name.contains('/') || model_name.contains('\\') || model_name.contains("..") {
         return Err(AppError::InvalidInput(
             "Invalid filename: must not contain path separators".into(),

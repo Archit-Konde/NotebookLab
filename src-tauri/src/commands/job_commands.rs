@@ -21,13 +21,6 @@ use crate::error::AppResult;
 use crate::services::job_service::Job;
 use crate::state::AppState;
 
-/// One job by id, including its result once it has finished.
-#[tauri::command(rename_all = "snake_case")]
-pub async fn get_job(app: tauri::AppHandle, job_id: String) -> AppResult<Option<Job>> {
-    let state: State<'_, AppState> = app.state();
-    state.jobs.get(&job_id)
-}
-
 /// Every job this session, newest first. A page that has just mounted calls
 /// this once and then follows the event stream.
 #[tauri::command(rename_all = "snake_case")]

@@ -4,6 +4,16 @@ All notable changes to NotebookLab will be documented in this file.
 
 ## [Unreleased]
 
+### Removed
+
+- Two commands that nothing called. get_job returned a single job by id, which
+  the job store never asked for because it reads the whole list and then follows
+  the event stream, and download_default_model fetched a hardcoded model that
+  the catalog now carries and the Models page downloads by id. Both were exposed
+  over the IPC boundary while being unreachable from any interface. With the
+  second gone, the download helper no longer needs optional arguments or the
+  fallback branches behind them.
+
 ## [0.8.5] - 2026-08-02
 
 ### Changed
